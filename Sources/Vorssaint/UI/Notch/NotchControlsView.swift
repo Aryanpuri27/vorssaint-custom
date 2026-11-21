@@ -425,11 +425,13 @@ struct NotchActionTile: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6) {
-                Image(systemName: symbol).font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(active ? accent.glyph : .white.opacity(0.85))
+                Image(systemName: symbol).font(.system(size: 17, weight: .semibold))
+                    .symbolVariant(.fill)
+                    .foregroundStyle(active ? .white : NotchApple.color(for: symbol))
                     .contentTransition(.symbolEffect(.replace))
-                    .frame(width: 40, height: 40)
-                    .background(active ? accent.fill : Color.white.opacity(0.075), in: Circle())
+                    .frame(width: 42, height: 42)
+                    .background(active ? NotchApple.color(for: symbol) : Color.white.opacity(0.1), in: Circle())
+                    .overlay { Circle().strokeBorder(.white.opacity(active ? 0.25 : 0.08), lineWidth: 0.5) }
                     .animation(reduceMotion ? nil : .smooth(duration: 0.26), value: symbol)
                 label
                     .frame(maxWidth: .infinity)

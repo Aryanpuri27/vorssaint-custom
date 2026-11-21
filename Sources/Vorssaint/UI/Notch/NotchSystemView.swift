@@ -130,9 +130,12 @@ struct NotchSystemView: View {
     private func cardButton(_ card: Card) -> some View {
         Button { select(card.kind) } label: {
             VStack(alignment: .leading, spacing: 6) {
-                Label(card.title, systemImage: card.symbol)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary).lineLimit(1)
+                HStack(spacing: 5) {
+                    Image(systemName: card.symbol).symbolVariant(.fill)
+                        .foregroundStyle(NotchApple.color(for: card.symbol))
+                    Text(card.title).foregroundStyle(.secondary)
+                }
+                .font(.system(size: 11, weight: .semibold)).lineLimit(1)
                 Text(card.value ?? "…")
                     .font(.system(size: card.detail == nil ? 22 : 15, weight: .medium, design: .rounded))
                     .monospacedDigit().contentTransition(.numericText()).lineLimit(1).minimumScaleFactor(0.75)
@@ -140,7 +143,7 @@ struct NotchSystemView: View {
                 if let detail = card.detail {
                     Text(detail).font(.system(size: 11)).monospacedDigit().foregroundStyle(.secondary).lineLimit(1)
                 } else if let level = card.level {
-                    NotchMeter(value: level, tint: card.wantsAttention ? .orange : .white)
+                    NotchMeter(value: level, tint: card.wantsAttention ? NotchApple.orange : NotchApple.color(for: card.symbol))
                 }
             }
             .padding(.horizontal, 12)

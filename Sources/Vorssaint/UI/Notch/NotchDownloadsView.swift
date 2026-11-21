@@ -60,11 +60,8 @@ private struct NotchDownloadsSetupView: View {
     }
 
     private var glyph: some View {
-        Image(systemName: downloads.folderUnavailable ? "exclamationmark.triangle" : "arrow.down.circle")
-            .font(.system(size: 26, weight: .light))
-            .foregroundStyle(.white.opacity(0.65))
-            .frame(width: 56, height: 56)
-            .notchGlassChip(radius: 18, fill: 0.05)
+        NotchAppIcon(symbol: downloads.folderUnavailable ? "exclamationmark.triangle" : "arrow.down",
+                     color: downloads.folderUnavailable ? NotchApple.orange : NotchApple.blue, size: 52)
             .accessibilityHidden(true)
     }
 
@@ -101,7 +98,8 @@ private struct NotchDownloadsSetupView: View {
                     .font(.system(size: 12, weight: .semibold))
                     .padding(.horizontal, 14)
                     .frame(height: 28)
-                    .modifier(NotchGlassChip(shape: Capsule(), fill: 0.14))
+                    .background(NotchApple.blue, in: Capsule())
+                    .modifier(NotchGlassChip(shape: Capsule(), fill: 0))
                     .contentShape(Capsule())
             }
             .buttonStyle(NotchButtonStyle(cornerRadius: 14))

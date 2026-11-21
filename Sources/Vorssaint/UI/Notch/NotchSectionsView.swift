@@ -102,20 +102,17 @@ struct NotchSectionsView: View {
         let current = service.selected == module
         let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
         return Button { service.select(module) } label: {
-            VStack(spacing: 6) {
-                Image(systemName: module.symbol)
-                    .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(tint(for: module))
-                    .frame(width: 25, height: 25)
+            VStack(spacing: 5) {
+                NotchAppIcon(symbol: module.symbol, color: NotchApple.color(for: module), size: 34)
                 Text(module.title(l10n.language))
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 11, weight: .semibold))
                     .lineLimit(2)
                     .minimumScaleFactor(0.85)
                     .multilineTextAlignment(.center)
                     .frame(height: 27)
                 Text("⌥⌘" + module.shortcutKey.uppercased())
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.45))
             }
             .padding(.horizontal, 6)
             .frame(maxWidth: .infinity)

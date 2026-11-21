@@ -549,13 +549,17 @@ struct QuickLauncherView: View {
     }
 
     private func iconColor(_ item: QuickLauncherItem) -> Color {
+        if notchSize != nil { return .white }
         if item == .micMute, micMute.isMuted { return .red }
         if isActive(item) { return .accentColor }
         return .primary.opacity(0.85)
     }
 
     private func iconBackground(_ item: QuickLauncherItem, isSelected: Bool, isHovered: Bool) -> Color {
-        if notchSize != nil { return .white.opacity(isSelected || isHovered ? 0.14 : 0.065) }
+        if notchSize != nil {
+            let color = item == .micMute && micMute.isMuted ? NotchApple.red : NotchApple.color(for: icon(for: item))
+            return isActive(item) || isSelected || isHovered ? color : color.opacity(0.82)
+        }
         if isActive(item) { return Color.accentColor.opacity(0.18) }
         if isSelected || isHovered { return Color.primary.opacity(0.1) }
         return Color.primary.opacity(0.07)

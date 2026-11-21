@@ -101,7 +101,16 @@ struct RecentCapturesView: View {
 
     @ViewBuilder
     private var content: some View {
-        if visibleEntries.isEmpty {
+        if visibleEntries.isEmpty, notchSize != nil {
+            VStack(spacing: 12) {
+                NotchAppIcon(symbol: "camera.viewfinder", color: NotchApple.purple, size: 52)
+                Text(text.empty)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if visibleEntries.isEmpty {
             Text(text.empty)
                 .font(.system(size: 10.5))
                 .foregroundStyle(.tertiary)

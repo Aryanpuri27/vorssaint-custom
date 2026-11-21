@@ -24,9 +24,7 @@ struct NotchNotificationsView: View {
                 }
             } else if service.items.isEmpty {
                 HStack(spacing: 14) {
-                    Image(systemName: "bell").font(.system(size: 26, weight: .light)).foregroundStyle(.white.opacity(0.6))
-                        .frame(width: 56, height: 56)
-                        .notchGlassChip(radius: 18, fill: 0.05)
+                    NotchAppIcon(symbol: "bell.badge", color: NotchApple.red, size: 52)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(service.monitoring ? text.empty : text.waiting).font(.headline)
                         Text(text.privacy).font(.caption).foregroundStyle(.white.opacity(0.65))

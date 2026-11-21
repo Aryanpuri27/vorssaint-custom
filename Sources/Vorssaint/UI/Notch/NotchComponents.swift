@@ -272,18 +272,14 @@ struct NotchEmptyView<Actions: View>: View {
     }
 
     private var glyph: some View {
-        Image(systemName: symbol)
-            .font(.system(size: 26, weight: .light))
-            .foregroundStyle(.white.opacity(0.65))
-            .frame(width: 56, height: 56)
-            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        NotchAppIcon(symbol: symbol, color: NotchApple.color(for: symbol), size: 48)
             .accessibilityHidden(true)
     }
 
     private var label: some View {
         Text(message)
-            .font(.system(size: 12))
-            .foregroundStyle(.secondary)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.white.opacity(0.75))
             .fixedSize(horizontal: false, vertical: true)
     }
 }
@@ -309,7 +305,8 @@ struct NotchPillButton: View {
                 .lineLimit(1)
                 .padding(.horizontal, 14)
                 .frame(height: 28)
-                .modifier(NotchGlassChip(shape: Capsule(), fill: prominent ? 0.24 : 0.08))
+                .background(prominent ? NotchApple.blue : .clear, in: Capsule())
+                .modifier(NotchGlassChip(shape: Capsule(), fill: prominent ? 0 : 0.08))
                 .contentShape(Capsule())
         }
         .buttonStyle(NotchButtonStyle(cornerRadius: 14))

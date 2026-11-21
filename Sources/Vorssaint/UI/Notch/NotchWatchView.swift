@@ -300,11 +300,7 @@ private struct NotchWatchSetupView: View {
     }
 
     private var glyph: some View {
-        Image(systemName: NotchModule.watch.symbol)
-            .font(.system(size: 26, weight: .light))
-            .foregroundStyle(.white.opacity(0.65))
-            .frame(width: 56, height: 56)
-            .notchGlassChip(radius: 18, fill: 0.05)
+        NotchAppIcon(symbol: NotchModule.watch.symbol, color: NotchApple.teal, size: 52)
             .accessibilityHidden(true)
     }
 
