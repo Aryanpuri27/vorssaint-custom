@@ -86,6 +86,12 @@ final class NotchTimerService: ObservableObject {
             detail: text.phase(session.phase), symbol: "timer", mascot: reaction))
         // It takes the news in the notice, or where it is when the notice cannot show.
         NotchService.shared.reactMascot(reaction)
+        if session.mode == .pomodoro {
+            let line = session.phase == .focus ? "Break time! Stretch with me 🦉"
+                : session.cycleFinished ? "All rounds done. Great focus! 🎉" : "Back to focus. You’ve got this!"
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) { NotchStageController.shared.say(line) }
+            if session.phase == .focus { NotchMoodMeter.shared.note(.taskDone) }
+        }
         alert.start(enabled: NotchTimerSupport.isSoundEnabled())
     }
 

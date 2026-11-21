@@ -23,7 +23,7 @@ private final class NotchStagePanel: NSPanel {
 }
 
 final class NotchStageModel: ObservableObject {
-    enum Mode: Equatable { case hidden, act(NotchStageAct), game, say(String), board, compose, reflex }
+    enum Mode: Equatable { case hidden, act(NotchStageAct), game, say(String), board, compose, reflex, toolbox, tool(NotchTool), meeting }
 
     @Published var mode: Mode = .hidden
     @Published var open = false
@@ -33,6 +33,7 @@ final class NotchStageModel: ObservableObject {
     @Published var sideInset: CGFloat = 0
     var started = Date()
     let game = NotchFireflyGame()
+    var meeting: (title: String, link: URL, start: Date) = ("", URL(fileURLWithPath: "/"), Date())
     let reflex = NotchReflexGame()
 }
 
@@ -129,6 +130,7 @@ final class NotchStageController {
     private func considerShow() {
         considerRhythm()
         NotchClaudeExtras.shared.minute()
+        NotchMeetings.shared.minute()
         guard showsEnabled, quietMoment, model.mode == .hidden else { return }
         // About every half hour, give or take, never sooner than 20 minutes.
         let since = Date().timeIntervalSince(lastShow)
@@ -151,6 +153,43 @@ final class NotchStageController {
         let work = DispatchWorkItem { [weak self] in self?.close() }
         closeWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: work)
+    }
+
+    /// Every tool, as app icons.
+    func openToolbox() {
+        closeWork?.cancel()
+        if NotchService.shared.expanded { NotchService.shared.collapse() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + (model.mode == .hidden ? 0.35 : 0)) { [weak self] in
+            self?.present(.toolbox, size: CGSize(width: 460, height: 210), interactive: true)
+        }
+    }
+
+    func open(_ tool: NotchTool) {
+        switch tool {
+        case .claudeTask: compose()
+        case .claudeSessions: showBoard()
+        case .firefly: startGame()
+        case .hoot: startReflex()
+        default:
+            closeWork?.cancel()
+            if NotchService.shared.expanded { NotchService.shared.collapse() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + (model.mode == .hidden ? 0.35 : 0)) { [weak self] in
+                self?.present(.tool(tool), size: tool.size, interactive: true)
+                if tool == .terminal { NSApp.activate() }
+            }
+        }
+    }
+
+    /// A meeting with a call link is about to start.
+    func offerMeeting(title: String, link: URL, start: Date) {
+        guard model.mode == .hidden, !NotchService.shared.fullscreenCompact else { return }
+        model.meeting = (title, link, start)
+        present(.meeting, size: CGSize(width: 440, height: 70), interactive: true)
+        NotchService.shared.reactMascot(.bounce, patience: 2)
+        closeWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in if self?.model.mode == .meeting { self?.close() } }
+        closeWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 120, execute: work)
     }
 
     /// Start a Claude Code task from the notch.
@@ -254,7 +293,9 @@ final class NotchStageController {
         if interactive {
             panel.makeKey()
             keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                guard let self, [.game, .board, .compose, .reflex].contains(self.model.mode) else { return event }
+                guard let self, self.model.mode != .hidden else { return event }
+                if case .act = self.model.mode { return event }
+                if case .say = self.model.mode { return event }
                 if self.model.mode == .reflex {
                     if event.keyCode == 53 { self.close(); return nil }
                     if event.keyCode == 49 { self.model.reflex.press(); return nil }
@@ -345,6 +386,12 @@ struct NotchStageView: View {
                     case .board: NotchClaudeBoardView { NotchStageController.shared.close() }
                     case .compose: NotchClaudeComposeView { NotchStageController.shared.close() }
                     case .reflex: NotchReflexGameView(game: model.reflex) { NotchStageController.shared.close() }
+                    case .toolbox: NotchToolboxView { NotchStageController.shared.close() }
+                    case .tool(let tool): NotchStageToolView(tool: tool)
+                    case .meeting:
+                        NotchMeetingView(title: model.meeting.title, link: model.meeting.link, start: model.meeting.start) {
+                            NotchStageController.shared.close()
+                        }
                     case .hidden: Color.clear
                     }
                 }
@@ -833,5 +880,22 @@ struct NotchReflexGameView: View {
         .foregroundStyle(.white)
         .contentShape(Rectangle())
         .onTapGesture { game.press() }
+    }
+}
+
+/// The tool a stage shows, by name.
+struct NotchStageToolView: View {
+    let tool: NotchTool
+    var body: some View {
+        let close = { NotchStageController.shared.close() }
+        switch tool {
+        case .terminal: NotchTerminalView(close: close)
+        case .github: NotchGitHubView(close: close)
+        case .focus: NotchFocusView(close: close)
+        case .reminders: NotchRemindersView(close: close)
+        case .weather: NotchWeatherView(close: close)
+        case .qr: NotchQRView(close: close)
+        default: EmptyView()
+        }
     }
 }

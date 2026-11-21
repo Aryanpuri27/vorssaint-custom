@@ -182,8 +182,6 @@ struct NotchSectionsButton: View {
 
     var body: some View {
         let items = self.items
-        let companion = !preview && NotchMascotSupport.isEnabled()
-        let claude = !preview && ClaudeLiveService.shared.listening
         NotchIconButton(symbol: "square.grid.2x2", title: FeatureStrings.notch(l10n.language).sectionsTitle,
                         selected: open, action: action)
             .overlay(alignment: .top) {
@@ -196,6 +194,10 @@ struct NotchSectionsButton: View {
                             }
                         }
                         if !preview {
+                            NotchIconButton(symbol: "square.grid.3x3.fill", title: "Toolbox") {
+                                open = false
+                                NotchStageController.shared.openToolbox()
+                            }
                             NotchIconButton(symbol: "plus.bubble", title: "New Claude task") {
                                 open = false
                                 NotchStageController.shared.compose()
@@ -207,16 +209,7 @@ struct NotchSectionsButton: View {
                                 NotchStageController.shared.showBoard()
                             }
                         }
-                        if companion {
-                            NotchIconButton(symbol: "gamecontroller.fill", title: "Firefly Catch") {
-                                open = false
-                                NotchStageController.shared.startGame()
-                            }
-                            NotchIconButton(symbol: "bolt.fill", title: "Hoot! (reaction game)") {
-                                open = false
-                                NotchStageController.shared.startReflex()
-                            }
-                        }
+
                     }
                     .padding(4)
                     .background(Capsule().fill(Color(white: 0.07)))

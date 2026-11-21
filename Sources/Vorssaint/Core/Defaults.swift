@@ -1011,6 +1011,9 @@ enum DefaultsKey {
     static let notchMascotGameBestReflex = "notchMascotGameBestReflex" // best reaction time in Hoot!, in milliseconds
     static let claudeRecap = "claudeRecap" // the companion sums up the day's Claude Code work in the evening
     static let claudeSpikeAlert = "claudeSpikeAlert" // the companion warns when spending jumps
+    static let notchGitHub = "notchGitHub" // pull requests and checks through the GitHub CLI
+    static let notchWeatherCity = "notchWeatherCity" // empty: the city of this Mac's time zone
+    static let notchWorldClocks = "notchWorldClocks" // time zone identifiers, comma separated
     static let notchMascotSide = "notchMascotSide" // NotchMascotSide.rawValue, beside the camera
     static let notchMascotVisitFrequency = "notchMascotVisitFrequency" // NotchMascotVisitFrequency.rawValue
     static let notchMascotHidesWhenIdle = "notchMascotHidesWhenIdle" // hops into the island after a quiet while
@@ -1635,6 +1638,9 @@ enum Defaults {
         DefaultsKey.notchPrivacyDots: true,
         DefaultsKey.claudeRecap: true,
         DefaultsKey.claudeSpikeAlert: true,
+        DefaultsKey.notchGitHub: true,
+        DefaultsKey.notchWeatherCity: "",
+        DefaultsKey.notchWorldClocks: "America/New_York,Europe/London,Asia/Tokyo",
         DefaultsKey.notchMascotSide: NotchMascotSide.left.rawValue,
         DefaultsKey.notchMascotVisitFrequency: NotchMascotVisitFrequency.normal.rawValue,
         DefaultsKey.notchMascotHidesWhenIdle: true,

@@ -13,6 +13,8 @@ Needs Screen Recording and Accessibility for the terminal you run it from
 | `notchctl press TITLE` | press a button by name, through accessibility (no pointer) |
 | `notchctl click X Y` / `dclick X Y` | click at a point |
 | `notchctl scroll DX DY [option]` | scroll, optionally holding Option |
+| `notchctl fill TEXT` | set the first text field's text through accessibility |
+| `notchctl type TEXT` / `key return\|escape\|up\|down\|tab` | keyboard input, only while Hoo Notch is frontmost |
 | `notchctl ax [depth]` | the app's accessibility tree, with frames |
 | `notchctl away` | park the pointer away from the notch |
 

@@ -138,6 +138,46 @@ case "scroll":
     }
 case "away":
     let n = notchRect(); move(CGPoint(x: n.midX, y: 420))
+case "type":
+    // Types text, but only into Hoo Notch: never into another app by mistake.
+    guard args.count >= 2 else { fail("usage: notchctl type TEXT") }
+    guard let pid = appPID(), NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else {
+        fail("refusing to type: Hoo Notch is not the frontmost app")
+    }
+    for scalar in args[1].unicodeScalars {
+        var unit = Array(String(scalar).utf16)
+        for down in [true, false] {
+            if let e = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: down) {
+                e.keyboardSetUnicodeString(stringLength: unit.count, unicodeString: &unit); e.post(tap: .cghidEventTap)
+            }
+        }
+        usleep(12_000)
+    }
+case "key":
+    // return | escape | up | down | tab
+    let codes: [String: CGKeyCode] = ["return": 36, "escape": 53, "up": 126, "down": 125, "tab": 48]
+    guard args.count >= 2, let code = codes[args[1]] else { fail("usage: notchctl key return|escape|up|down|tab") }
+    guard let pid = appPID(), NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else {
+        fail("refusing to send keys: Hoo Notch is not the frontmost app")
+    }
+    for down in [true, false] { CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: down)?.post(tap: .cghidEventTap) }
+case "fill":
+    // Sets the text of the app's first text field through accessibility.
+    guard args.count >= 2, let pid = appPID() else { fail("usage: notchctl fill TEXT") }
+    func field(_ element: AXUIElement, _ depth: Int) -> AXUIElement? {
+        var role: AnyObject?
+        AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role)
+        if (role as? String) == kAXTextFieldRole || (role as? String) == kAXTextAreaRole { return element }
+        guard depth < 30 else { return nil }
+        var children: AnyObject?
+        AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children)
+        for child in (children as? [AXUIElement]) ?? [] { if let hit = field(child, depth + 1) { return hit } }
+        return nil
+    }
+    guard let target = field(AXUIElementCreateApplication(pid), 0) else { fail("no text field on screen") }
+    AXUIElementSetAttributeValue(target, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+    let result = AXUIElementSetAttributeValue(target, kAXValueAttribute as CFString, args[1] as CFString)
+    print(result == .success ? "filled" : "fill failed (\(result.rawValue))")
 case "press":
     // Presses a button in the app by its name, through accessibility: no
     // pointer, so nothing behind the island can be clicked by mistake.

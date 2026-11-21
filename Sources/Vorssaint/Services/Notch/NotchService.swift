@@ -1177,6 +1177,7 @@ final class NotchService: ObservableObject {
             NotchStageController.shared.start()
             ClaudeLiveService.shared.start()
             NotchPrivacyMonitor.shared.start()
+            NotchGitHub.shared.start()
             installObservers()
         }
         syncShortcut()
