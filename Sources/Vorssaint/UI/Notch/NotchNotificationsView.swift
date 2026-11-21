@@ -81,6 +81,9 @@ private struct NotchNotificationRow: View {
     @ObservedObject var service: NotchNotificationService
     let text: NotchNotificationStrings
     @State private var feedback: String?
+    /// A swipe up throws the card away, as on a phone.
+    @State private var lift: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -121,6 +124,22 @@ private struct NotchNotificationRow: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .notchGlassChip(radius: 14, fill: 0.06)
         .clipped()
+        .offset(y: min(0, lift))
+        .opacity(1 + Double(min(0, lift)) / 140)
+        .scaleEffect(1 + min(0, lift) / 900)
+        .simultaneousGesture(DragGesture(minimumDistance: 14)
+            .onChanged { value in
+                guard abs(value.translation.height) > abs(value.translation.width) else { return }
+                lift = value.translation.height < 0 ? value.translation.height : value.translation.height * 0.15
+            }
+            .onEnded { value in
+                if value.translation.height < -48 || value.predictedEndTranslation.height < -120 {
+                    withAnimation(reduceMotion ? nil : .easeIn(duration: 0.16)) { lift = -160 }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + (reduceMotion ? 0 : 0.16)) { service.dismiss(item.id) }
+                } else {
+                    withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.65)) { lift = 0 }
+                }
+            })
         .accessibilityElement(children: .contain)
     }
 }

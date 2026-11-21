@@ -67,8 +67,32 @@ final class NotchStageController {
         return notch.running && !notch.expanded && !notch.fullscreenCompact && model.mode == .hidden
     }
 
+    /// Minutes of use without a five-minute pause, and the day's greetings.
+    private var activeMinutes = 0
+    private var greeted: (morning: String?, night: String?) = (nil, nil)
+
+    private func considerRhythm() {
+        let idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+        activeMinutes = idle > 300 ? 0 : activeMinutes + 1
+        guard showsEnabled, quietMoment, idle < 60 else { return }
+        let calendar = Calendar.current, now = Date()
+        let day = calendar.startOfDay(for: now).description
+        let hour = calendar.component(.hour, from: now)
+        if (5..<11).contains(hour), greeted.morning != day {
+            greeted.morning = day
+            say(["Good morning! ☀︎", "Morning! Ready when you are.", "Hoo! A fresh day."][calendar.component(.weekday, from: now) % 3])
+        } else if (1..<5).contains(hour), greeted.night != day {
+            greeted.night = day
+            say("It’s late… Hoo is getting sleepy 🌙")
+        } else if activeMinutes >= 90 {
+            activeMinutes = 30
+            say("You’ve been at it a while. Stretch break?")
+        }
+    }
+
     private func considerShow() {
-        guard showsEnabled, quietMoment else { return }
+        considerRhythm()
+        guard showsEnabled, quietMoment, model.mode == .hidden else { return }
         // About every half hour, give or take, never sooner than 20 minutes.
         let since = Date().timeIntervalSince(lastShow)
         guard since > 20 * 60, Double.random(in: 0..<1) < min(1, (since - 20 * 60) / (20 * 60)) else { return }

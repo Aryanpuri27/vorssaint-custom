@@ -14,6 +14,7 @@ struct NotchAgentStrip: View {
     @ObservedObject private var usage = AgentUsageService.shared
     @ObservedObject private var l10n = L10n.shared
     @AppStorage(DefaultsKey.notchAgentsReadout) private var readout = NotchAgentReadout.elapsed.rawValue
+    @ObservedObject private var claudeLive = ClaudeLiveService.shared
     @AppStorage(DefaultsKey.notchAgentsLimitDisplay) private var display = NotchAgentLimitDisplay.remaining.rawValue
     @AppStorage(DefaultsKey.notchAgentsLimitFocus) private var focus = NotchAgentLimitFocus.mostUsed.rawValue
 
@@ -44,7 +45,19 @@ struct NotchAgentStrip: View {
             Button { service.openActivity(.agents) } label: {
                 HStack(spacing: 1) {
                     if geometry.compactActivityWingWidth >= 28 {
-                        ForEach(working) { NotchAgentGlyph(provider: $0, size: iconSize) }
+                        // With Claude Code live connected, what it is doing
+                        // right now: editing, running, searching, or asking.
+                        if let step = claudeLive.currentStep, working.contains(.claude) || step.waiting {
+                            Image(systemName: step.symbol)
+                                .font(.system(size: iconSize, weight: .semibold))
+                                .foregroundStyle(step.waiting ? Color.orange : NotchClaudeStyle.accent)
+                                .contentTransition(.symbolEffect(.replace))
+                                .symbolEffect(.pulse, isActive: step.waiting)
+                                .animation(.smooth(duration: 0.25), value: step.symbol)
+                                .frame(width: iconSize + 4, height: iconSize + 4)
+                        } else {
+                            ForEach(working) { NotchAgentGlyph(provider: $0, size: iconSize) }
+                        }
                     }
                 }
                 .padding(.leading, iconInset)

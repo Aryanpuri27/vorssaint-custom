@@ -80,6 +80,15 @@ final class ClaudeLiveService: ObservableObject {
 
     var isEnabled: Bool { UserDefaults.standard.object(forKey: DefaultsKey.claudeLiveEnabled) as? Bool ?? true }
 
+    /// What the busiest session is doing right now, for the closed notch.
+    var currentStep: (symbol: String, waiting: Bool)? {
+        let recent = sessions.filter { $0.status == .working || $0.status == .waiting }
+            .filter { Date().timeIntervalSince($0.lastEvent) < 600 }
+        if recent.contains(where: { $0.status == .waiting }) { return ("hand.raised.fill", true) }
+        guard let busy = recent.max(by: { $0.lastEvent < $1.lastEvent }) else { return nil }
+        return (busy.stepSymbol, false)
+    }
+
     // MARK: Server
 
     func start() {

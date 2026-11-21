@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Vorssaint
 
+import AppKit
 import SwiftUI
 
 // What Claude Code's live hooks look like in the notch: a card when a
@@ -194,5 +195,24 @@ struct NotchClaudeBoardView: View {
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
         .notchGlassChip(radius: 12, fill: 0.06)
+        .contextMenu {
+            Button("Bring its window forward") { live.focus(session.id) }
+            if !session.cwd.isEmpty {
+                Button("Show project in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: session.cwd)]) }
+                if let code = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.microsoft.VSCode") {
+                    Button("Open project in VS Code") {
+                        NSWorkspace.shared.open([URL(fileURLWithPath: session.cwd)], withApplicationAt: code,
+                                                configuration: NSWorkspace.OpenConfiguration())
+                    }
+                }
+                Button("Copy project path") { copy(session.cwd) }
+            }
+            if let message = session.lastMessage { Button("Copy Claude’s last message") { copy(message) } }
+        }
+    }
+
+    private func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 }
