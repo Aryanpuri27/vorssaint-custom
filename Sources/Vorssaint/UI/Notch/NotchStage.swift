@@ -51,6 +51,20 @@ final class NotchStageController {
     static let gameSize = CGSize(width: 460, height: 170)
 
     private var expansion: AnyCancellable?
+    /// While a show or a word is up, the pointer reaching it sends it away,
+    /// so it never stands between you and the island.
+    private var pointerWatch: Timer?
+
+    private func watchPointer(_ on: Bool) {
+        pointerWatch?.invalidate(); pointerWatch = nil
+        guard on else { return }
+        let timer = Timer(timeInterval: 0.15, repeats: true) { [weak self] _ in
+            guard let self, let frame = self.panel?.frame, self.model.open else { return }
+            if frame.insetBy(dx: -4, dy: -4).contains(NSEvent.mouseLocation) { self.close() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        pointerWatch = timer
+    }
 
     /// Checks once a minute whether it is a good moment for a show.
     func start() {
@@ -204,6 +218,7 @@ final class NotchStageController {
 
     func close() {
         closeWork?.cancel()
+        watchPointer(false)
         model.game.stop()
         model.reflex.stop()
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
@@ -235,6 +250,7 @@ final class NotchStageController {
         model.started = Date()
         model.open = false
         panel.orderFrontRegardless()
+        watchPointer(!interactive)
         if interactive {
             panel.makeKey()
             keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in

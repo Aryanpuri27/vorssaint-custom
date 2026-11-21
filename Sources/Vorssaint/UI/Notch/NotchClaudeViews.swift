@@ -72,8 +72,7 @@ struct NotchClaudeCardView: View {
         VStack(alignment: .leading, spacing: 9) {
             header(symbol: "list.bullet.clipboard", title: "Claude’s plan", project: ask.project, account: ask.account)
             ScrollView {
-                Text((try? AttributedString(markdown: plan, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-                     ?? AttributedString(plan))
+                Text(Self.planText(plan))
                     .font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.85))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -87,6 +86,23 @@ struct NotchClaudeCardView: View {
                 chip("Approve", symbol: "checkmark", prominent: true) { live.approvePlan(ask.id, true) }
             }
         }
+    }
+
+    /// Markdown headings become bold lines; the rest keeps its inline styling.
+    static func planText(_ plan: String) -> AttributedString {
+        var result = AttributedString()
+        for (index, raw) in plan.components(separatedBy: "\n").enumerated() {
+            var line = raw
+            var heading = false
+            while line.hasPrefix("#") { line.removeFirst(); heading = true }
+            line = line.trimmingCharacters(in: .whitespaces).isEmpty ? line : (heading ? line.trimmingCharacters(in: .whitespaces) : line)
+            var piece = (try? AttributedString(markdown: line, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+                ?? AttributedString(line)
+            if heading { piece.font = .system(size: 12.5, weight: .bold) }
+            if index > 0 { result += AttributedString("\n") }
+            result += piece
+        }
+        return result
     }
 
     private func permissionCard(_ ask: ClaudeLiveAsk) -> some View {

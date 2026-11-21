@@ -986,7 +986,7 @@ final class NotchService: ObservableObject {
             }
             if let card = notice.claudeCard {
                 let ask = card.hasPrefix("ask:") ? ClaudeLiveService.shared.asks.first { "ask:" + $0.id == card } : nil
-                let height: CGFloat = ask?.plan != nil ? 190 : ask.map { $0.questions.isEmpty ? 116 : 150 } ?? 96
+                let height: CGFloat = ask?.plan != nil ? 190 : ask.map { $0.questions.isEmpty ? 98 : 112 } ?? 96
                 return geometry.notificationPreviewSize(contentHeight: height)
             }
             return geometry.notificationPreviewSize(
@@ -5393,8 +5393,18 @@ extension NotchService {
         }
         let title = !ask.answerable ? "Claude needs you" : ask.plan != nil ? "Approve the plan?"
             : !ask.questions.isEmpty ? "Claude has a question" : "Allow \(ask.tool)?"
-        show(NotchNotice(event: .agents, title: title, detail: ask.project, symbol: "hand.raised.fill",
-                         agent: .claude, claudeCard: "ask:" + ask.id))
+        let notice = NotchNotice(event: .agents, title: title, detail: ask.project, symbol: "hand.raised.fill",
+                                 agent: .claude, claudeCard: "ask:" + ask.id)
+        // An open island would swallow the notice: fold it away first, then ask.
+        if expanded || peeking {
+            collapse()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                guard ClaudeLiveService.shared.asks.contains(where: { $0.id == ask.id }) else { return }
+                self?.show(notice)
+            }
+            return
+        }
+        show(notice)
     }
 
     func claudeAnswered() {

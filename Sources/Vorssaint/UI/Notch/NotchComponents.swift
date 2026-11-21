@@ -219,8 +219,9 @@ struct NotchSectionsButton: View {
                         }
                     }
                     .padding(4)
-                    .background(Capsule().fill(Color.black.opacity(0.78)))
+                    .background(Capsule().fill(Color(white: 0.07)))
                     .modifier(NotchGlassChip(shape: Capsule(), fill: 0.06))
+                    .shadow(color: .black.opacity(0.5), radius: 10, y: 4)
                     .offset(y: 32)
                     .transition(.scale(scale: 0.5, anchor: .top).combined(with: .opacity))
                     .onHover(perform: hovering)
