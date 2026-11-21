@@ -510,7 +510,9 @@ final class NotchService: ObservableObject {
     var mascotAtRest: Bool { mascotOn && idleContent == .none && !mascotInBar && !mascotTucked }
 
     /// The face it keeps at rest: wide awake while Keep Awake holds the Mac up.
-    var mascotRestingMood: NotchMascotMood { KeepAwakeManager.shared.isActive ? .alert : .idle }
+    var mascotRestingMood: NotchMascotMood {
+        KeepAwakeManager.shared.isActive ? .alert : (NotchMoodMeter.shared.restingMood ?? .idle)
+    }
 
     /// Whether the closed island on `geometry` draws the companion: resting,
     /// or strolling through, where its wings fit beside the camera. A capsule
@@ -983,7 +985,9 @@ final class NotchService: ObservableObject {
                 return geometry.notificationPreviewSize(contentHeight: NotchSongPopLayout.contentHeight)
             }
             if let card = notice.claudeCard {
-                return geometry.notificationPreviewSize(contentHeight: card.hasPrefix("ask:") ? 116 : 96)
+                let ask = card.hasPrefix("ask:") ? ClaudeLiveService.shared.asks.first { "ask:" + $0.id == card } : nil
+                let height: CGFloat = ask?.plan != nil ? 190 : ask.map { $0.questions.isEmpty ? 116 : 150 } ?? 96
+                return geometry.notificationPreviewSize(contentHeight: height)
             }
             return geometry.notificationPreviewSize(
                 contentHeight: notice.previewContentHeight(width: geometry.notificationPreviewContentWidth))
@@ -1172,6 +1176,7 @@ final class NotchService: ObservableObject {
             running = true
             NotchStageController.shared.start()
             ClaudeLiveService.shared.start()
+            NotchPrivacyMonitor.shared.start()
             installObservers()
         }
         syncShortcut()
@@ -1640,6 +1645,8 @@ final class NotchService: ObservableObject {
             if holdsNotification, let id = notice?.notificationID { holdNotification(id); return }
             guard !hoverState.suppressed, (notice == nil || hiddenUntilHover), !expanded, !peeking, !dragPlaceholder,
                   hoverOpeningEnabled else { return }
+            // The companion's own spot: the pointer there pets it, it does not open the island.
+            if pointerOnHoo(point) { return }
             if !hiddenInFullscreen, compactActivity != nil, compactActivityGeometry.compactActivityWingWidth > 0,
                !UserDefaults.standard.bool(forKey: DefaultsKey.notchHoverExpands) { return }
             let work = DispatchWorkItem { [weak self] in
@@ -1653,6 +1660,7 @@ final class NotchService: ObservableObject {
                       !self.showsCompactActivityPicker,
                       self.captureControls == nil, (self.notice == nil || self.hiddenUntilHover), !self.dragPlaceholder,
                       self.hoverOpeningEnabled,
+                      !self.pointerOnHoo(NSEvent.mouseLocation),
                       self.windowHost?.blocksHoverReveal() == false,
                       self.geometry.contains(NSEvent.mouseLocation, in: self.watchesHiddenHover ? self.geometry.collapsed : self.surfaceSize) else { return }
                 // Following the closed island ends as it opens or peeks.
@@ -2392,6 +2400,8 @@ final class NotchService: ObservableObject {
         autoExpandWork?.cancel(); autoExpandWork = nil
         guard UserDefaults.standard.object(forKey: DefaultsKey.notchAutoExpand) as? Bool ?? true,
               incoming.notification != nil || incoming.event == .track || incoming.claudeCard != nil else { return }
+        // Quiet hours and calls keep the island closed, except for Claude asking.
+        if NotchQuiet.isActive, incoming.claudeCard?.hasPrefix("ask:") != true { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.autoExpandWork = nil
@@ -2826,6 +2836,8 @@ final class NotchService: ObservableObject {
                 else if self.geometry.floats, self.musicStripShowsControl { self.toggleMusicStripSong() }
                 else if !self.expanded, self.compactActivity == .calendar {
                     self.openCountdownEvent()
+                } else if !self.expanded, self.pointerOnHoo(NSEvent.mouseLocation) {
+                    self.pokeHoo()
                 } else { self.toggle() }
             })
         // A move between displays brings the window back on the next turn, once
@@ -5379,7 +5391,8 @@ extension NotchService {
             NotchStageController.shared.say("\(ask.project) is waiting for you")
             return
         }
-        let title = ask.answerable ? "Allow \(ask.tool)?" : "Claude needs you"
+        let title = !ask.answerable ? "Claude needs you" : ask.plan != nil ? "Approve the plan?"
+            : !ask.questions.isEmpty ? "Claude has a question" : "Allow \(ask.tool)?"
         show(NotchNotice(event: .agents, title: title, detail: ask.project, symbol: "hand.raised.fill",
                          agent: .claude, claudeCard: "ask:" + ask.id))
     }
@@ -5396,4 +5409,43 @@ extension NotchService {
 
     /// Each tool call; the companion keeps an eye on the work.
     func claudeStepped(tool: String) {}
+}
+
+// MARK: The companion's spot
+
+private var lastHooPoke: CFTimeInterval = 0
+
+extension NotchService {
+    /// Where the companion rests in the closed island, on screen, with a
+    /// little room around it; nil while it is not resting there.
+    func hooRect() -> CGRect? {
+        guard NotchMascotSupport.isEnabled(), mascotAtRest, !expanded, !peeking, compactActivity == nil, notice == nil,
+              !geometry.floats, geometry.restingWingWidth > 0 else { return nil }
+        let track = NotchMascotSupport.track(stripWidth: geometry.collapsed.width, stripHeight: geometry.stripHeight,
+                                             wing: geometry.restingWingWidth, cameraWidth: geometry.cameraWidth,
+                                             floats: geometry.floats, bodyHeight: geometry.stripBodyHeight, side: mascotSide)
+        let center = (geometry.physicalCamera?.midX ?? geometry.screen.midX) + surfaceShift
+        let originX = center - geometry.collapsed.width / 2
+        let reach = track.size / 2 + 6
+        return CGRect(x: originX + track.rest - reach, y: geometry.screen.maxY - geometry.stripHeight,
+                      width: reach * 2, height: geometry.stripHeight)
+    }
+
+    func pointerOnHoo(_ point: CGPoint) -> Bool { hooRect()?.contains(point) == true }
+
+    /// A click on the companion pokes it; a second one soon after starts its game.
+    func pokeHoo() {
+        let now = CACurrentMediaTime()
+        defer { lastHooPoke = now }
+        if now - lastHooPoke < 0.45 {
+            NotchStageController.shared.startGame()
+            return
+        }
+        let reactions: [NotchMascotReaction] = [.love, .bounce, .surprised, .celebrate, .groove]
+        reactMascot(reactions.randomElement() ?? .love, patience: 1)
+        NotchMoodMeter.shared.note(.petted)
+        if Int.random(in: 0..<4) == 0 {
+            NotchStageController.shared.say(["Hoo!", "Hehe, that tickles!", "Hi there 👋", "Pet me again?", "Hoo hoo!"].randomElement()!)
+        }
+    }
 }

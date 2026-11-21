@@ -187,12 +187,18 @@ struct NotchSectionsButton: View {
         NotchIconButton(symbol: "square.grid.2x2", title: FeatureStrings.notch(l10n.language).sectionsTitle,
                         selected: open, action: action)
             .overlay(alignment: .top) {
-                if open, !items.isEmpty || companion || claude {
+                if open, !preview {
                     VStack(spacing: 4) {
                         ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                             NotchIconButton(symbol: item.symbol, title: item.title(l10n)) {
                                 open = false
                                 NotchService.shared.activateQuickAction(item)
+                            }
+                        }
+                        if !preview {
+                            NotchIconButton(symbol: "plus.bubble", title: "New Claude task") {
+                                open = false
+                                NotchStageController.shared.compose()
                             }
                         }
                         if !preview, ClaudeLiveService.shared.listening {
@@ -202,9 +208,13 @@ struct NotchSectionsButton: View {
                             }
                         }
                         if companion {
-                            NotchIconButton(symbol: "gamecontroller.fill", title: "Play with your companion") {
+                            NotchIconButton(symbol: "gamecontroller.fill", title: "Firefly Catch") {
                                 open = false
                                 NotchStageController.shared.startGame()
+                            }
+                            NotchIconButton(symbol: "bolt.fill", title: "Hoot! (reaction game)") {
+                                open = false
+                                NotchStageController.shared.startReflex()
                             }
                         }
                     }

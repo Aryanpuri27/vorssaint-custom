@@ -129,7 +129,8 @@ struct NotchMascotStrings {
     /// What a search finds its page by, besides its name.
     var searchKeywords: [String] {
         [hint, visits, reactions, hidesWhenIdle, appearance, style, robot, color, behavior,
-         commandBar, keywords, outfitsCard, outfit, shows, showNow, game]
+         commandBar, keywords, outfitsCard, outfit, shows, showNow, game, extrasCard, dock, quietHours, privacyDots,
+         moodMeter, games, reflexGame]
     }
 
     func frequency(_ frequency: NotchMascotVisitFrequency) -> String {
@@ -563,5 +564,18 @@ extension NotchMascotStrings {
     var showsCaption: String { "About every half hour, and when an agent finishes, the companion drops out of the notch to perform for a few seconds." }
     var showNow: String { "Show me one now" }
     var game: String { "Firefly Catch" }
+    var extrasCard: String { "Notch extras" }
+    var dock: String { "Quick buttons in a dock" }
+    var dockCaption: String { "Settings, timer, mixer and music sit under the island’s grid button instead of floating around it." }
+    var quietHours: String { "Quiet hours" }
+    var quietCaption: String { "No pop-ups and no shows between these hours, and whenever your camera is on. Claude’s questions still come through." }
+    var privacyDots: String { "Camera and microphone dots" }
+    var privacyCaption: String { "A green dot beside the camera while it’s on, orange while the microphone is." }
+    var moodMeter: String { "Companion mood" }
+    var games: String { "Games" }
+    var reflexGame: String { "Hoot!" }
+    func gamesCaption(firefly: Int, reflex: Int) -> String {
+        "Firefly Catch best: \(firefly) · Hoot! best: " + (reflex > 0 ? "\(reflex) ms" : "not played yet")
+    }
     func gameCaption(best: Int) -> String { "Best score: \(best). Also in the island’s dock: hover the grid button." }
 }

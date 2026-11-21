@@ -276,6 +276,8 @@ struct NotchMascotSettings: View {
                     Button("Juggle") { NotchStageController.shared.perform(.juggle) }
                     Button("Magic trick") { NotchStageController.shared.perform(.magic) }
                     Button("Nap") { NotchStageController.shared.perform(.nap) }
+                    Button("Skateboard") { NotchStageController.shared.perform(.skate) }
+                    Button("Stargazing") { NotchStageController.shared.perform(.stargaze) }
                 }
                 .fixedSize()
             }

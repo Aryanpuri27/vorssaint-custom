@@ -1003,6 +1003,14 @@ enum DefaultsKey {
     static let claudeLiveEnabled = "claudeLiveEnabled" // listen for Claude Code's hooks on 127.0.0.1
     static let claudeLiveAnswerInNotch = "claudeLiveAnswerInNotch" // permission prompts wait for Allow or Deny in the notch
     static let claudeLiveToken = "claudeLiveToken" // the secret Claude Code's hooks send; local only
+    static let notchMascotMoodValue = "notchMascotMoodValue" // the companion's mood meter, 0–100
+    static let notchQuietHours = "notchQuietHours" // no pop-ups or shows between the start and end hour
+    static let notchQuietStart = "notchQuietStart"
+    static let notchQuietEnd = "notchQuietEnd"
+    static let notchPrivacyDots = "notchPrivacyDots" // dots on the closed notch while the camera or microphone is in use
+    static let notchMascotGameBestReflex = "notchMascotGameBestReflex" // best reaction time in Hoot!, in milliseconds
+    static let claudeRecap = "claudeRecap" // the companion sums up the day's Claude Code work in the evening
+    static let claudeSpikeAlert = "claudeSpikeAlert" // the companion warns when spending jumps
     static let notchMascotSide = "notchMascotSide" // NotchMascotSide.rawValue, beside the camera
     static let notchMascotVisitFrequency = "notchMascotVisitFrequency" // NotchMascotVisitFrequency.rawValue
     static let notchMascotHidesWhenIdle = "notchMascotHidesWhenIdle" // hops into the island after a quiet while
@@ -1621,6 +1629,12 @@ enum Defaults {
         DefaultsKey.notchQuickAccessDocked: true,
         DefaultsKey.claudeLiveEnabled: true,
         DefaultsKey.claudeLiveAnswerInNotch: true,
+        DefaultsKey.notchQuietHours: false,
+        DefaultsKey.notchQuietStart: 22,
+        DefaultsKey.notchQuietEnd: 8,
+        DefaultsKey.notchPrivacyDots: true,
+        DefaultsKey.claudeRecap: true,
+        DefaultsKey.claudeSpikeAlert: true,
         DefaultsKey.notchMascotSide: NotchMascotSide.left.rawValue,
         DefaultsKey.notchMascotVisitFrequency: NotchMascotVisitFrequency.normal.rawValue,
         DefaultsKey.notchMascotHidesWhenIdle: true,

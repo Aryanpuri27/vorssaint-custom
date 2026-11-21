@@ -11,7 +11,7 @@ import SwiftUI
 // never changes how the island lays out its pages.
 
 enum NotchStageAct: CaseIterable {
-    case flyBy, dance, juggle, magic, nap
+    case flyBy, dance, juggle, magic, nap, skate, stargaze
 
     var length: TimeInterval { self == .nap ? 5.5 : 4.5 }
 }
@@ -23,13 +23,17 @@ private final class NotchStagePanel: NSPanel {
 }
 
 final class NotchStageModel: ObservableObject {
-    enum Mode: Equatable { case hidden, act(NotchStageAct), game, say(String), board }
+    enum Mode: Equatable { case hidden, act(NotchStageAct), game, say(String), board, compose, reflex }
 
     @Published var mode: Mode = .hidden
     @Published var open = false
     @Published var tick = 0
+    /// Room for the camera strip above the room's content, and the island's shoulders.
+    @Published var topInset: CGFloat = 16
+    @Published var sideInset: CGFloat = 0
     var started = Date()
     let game = NotchFireflyGame()
+    let reflex = NotchReflexGame()
 }
 
 /// Owns the stage window and decides when the companion performs.
@@ -46,9 +50,19 @@ final class NotchStageController {
     static let actSize = CGSize(width: 340, height: 96)
     static let gameSize = CGSize(width: 460, height: 170)
 
+    private var expansion: AnyCancellable?
+
     /// Checks once a minute whether it is a good moment for a show.
     func start() {
         guard scheduler == nil else { return }
+        // The island opening takes the stage's place: a show or a word bows out.
+        expansion = NotchService.shared.$expanded.sink { [weak self] open in
+            guard open, let self else { return }
+            switch self.model.mode {
+            case .act, .say: DispatchQueue.main.async { self.close() }
+            default: break
+            }
+        }
         lastShow = Date()
         let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in self?.considerShow() }
         timer.tolerance = 15
@@ -58,7 +72,7 @@ final class NotchStageController {
 
     private var showsEnabled: Bool {
         NotchMascotSupport.isEnabled() && UserDefaults.standard.object(forKey: DefaultsKey.notchMascotShows) as? Bool ?? true
-            && !ProcessInfo.processInfo.isLowPowerModeEnabled
+            && !ProcessInfo.processInfo.isLowPowerModeEnabled && !NotchQuiet.isActive
     }
 
     /// The island is closed, on screen and quiet: nothing would be covered.
@@ -69,10 +83,17 @@ final class NotchStageController {
 
     /// Minutes of use without a five-minute pause, and the day's greetings.
     private var activeMinutes = 0
+    private var awayStarted: Date?
     private var greeted: (morning: String?, night: String?) = (nil, nil)
 
     private func considerRhythm() {
         let idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
+        NotchMoodMeter.shared.drift()
+        // Back from a real break, but not from the night.
+        if idle < 60, awayStarted.map({ (300...3 * 3600).contains(Date().timeIntervalSince($0)) }) == true {
+            NotchMoodMeter.shared.note(.breakTaken)
+        }
+        if idle > 300 { if awayStarted == nil { awayStarted = Date().addingTimeInterval(-idle) } } else if idle < 60 { awayStarted = nil }
         activeMinutes = idle > 300 ? 0 : activeMinutes + 1
         guard showsEnabled, quietMoment, idle < 60 else { return }
         let calendar = Calendar.current, now = Date()
@@ -86,12 +107,14 @@ final class NotchStageController {
             say("It’s late… Hoo is getting sleepy 🌙")
         } else if activeMinutes >= 90 {
             activeMinutes = 30
+            NotchMoodMeter.shared.note(.longStretch)
             say("You’ve been at it a while. Stretch break?")
         }
     }
 
     private func considerShow() {
         considerRhythm()
+        NotchClaudeExtras.shared.minute()
         guard showsEnabled, quietMoment, model.mode == .hidden else { return }
         // About every half hour, give or take, never sooner than 20 minutes.
         let since = Date().timeIntervalSince(lastShow)
@@ -108,12 +131,22 @@ final class NotchStageController {
     /// The companion says something in a bubble under the notch.
     func say(_ text: String) {
         guard NotchMascotSupport.isEnabled(), model.mode == .hidden || { if case .say = model.mode { return true }; return false }(),
-              !NotchService.shared.fullscreenCompact else { return }
+              !NotchService.shared.fullscreenCompact, !NotchQuiet.isActive, !NotchService.shared.expanded else { return }
         present(.say(text), size: CGSize(width: max(220, min(420, CGFloat(text.count) * 7.2 + 110)), height: 64), interactive: false)
         closeWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.close() }
         closeWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: work)
+    }
+
+    /// Start a Claude Code task from the notch.
+    func compose() {
+        closeWork?.cancel()
+        if NotchService.shared.expanded { NotchService.shared.collapse() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            self?.present(.compose, size: CGSize(width: 480, height: 230), interactive: true)
+            NSApp.activate()
+        }
     }
 
     /// Every Claude Code session, live.
@@ -149,6 +182,16 @@ final class NotchStageController {
         }
     }
 
+    func startReflex() {
+        closeWork?.cancel()
+        if NotchService.shared.expanded { NotchService.shared.collapse() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self else { return }
+            self.present(.reflex, size: CGSize(width: 400, height: 150), interactive: true)
+            self.model.reflex.begin()
+        }
+    }
+
     private func gameEnded() {
         closeWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
@@ -162,6 +205,7 @@ final class NotchStageController {
     func close() {
         closeWork?.cancel()
         model.game.stop()
+        model.reflex.stop()
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
         withAnimation(.easeIn(duration: 0.22)) { model.open = false }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.26) { [weak self] in
@@ -172,10 +216,17 @@ final class NotchStageController {
     }
 
     private func present(_ mode: NotchStageModel.Mode, size: CGSize, interactive: Bool) {
+        // The room hangs from the top of the screen like the island does, its
+        // top as wide as the room and curving into the edge, the camera strip
+        // above what it shows.
         let geometry = NotchService.shared.geometry
         let center = geometry.physicalCamera?.midX ?? geometry.screen.midX
-        let top = geometry.screen.maxY - geometry.stripHeight
-        let frame = CGRect(x: center - size.width / 2, y: top - size.height, width: size.width, height: size.height)
+        let strip = geometry.stripHeight
+        let shoulder = NotchLayout.shoulder(height: size.height + strip)
+        let full = CGSize(width: size.width + shoulder * 2, height: size.height + strip)
+        let frame = CGRect(x: center - full.width / 2, y: geometry.screen.maxY - full.height, width: full.width, height: full.height)
+        model.topInset = strip + 2
+        model.sideInset = shoulder
         let panel = self.panel ?? makePanel()
         panel.setFrame(frame, display: false)
         panel.allowsKey = interactive
@@ -187,8 +238,13 @@ final class NotchStageController {
         if interactive {
             panel.makeKey()
             keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                guard let self, self.model.mode == .game || self.model.mode == .board else { return event }
-                if self.model.mode == .board { if event.keyCode == 53 { self.close(); return nil }; return event }
+                guard let self, [.game, .board, .compose, .reflex].contains(self.model.mode) else { return event }
+                if self.model.mode == .reflex {
+                    if event.keyCode == 53 { self.close(); return nil }
+                    if event.keyCode == 49 { self.model.reflex.press(); return nil }
+                    return event
+                }
+                if self.model.mode != .game { if event.keyCode == 53 { self.close(); return nil }; return event }
                 switch event.keyCode {
                 case 53: self.close(); return nil                       // Escape
                 case 49, 126: self.model.game.flap(); return nil         // Space, up arrow
@@ -258,11 +314,11 @@ struct NotchStageView: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .top) {
-                NotchStageShape(neck: max(120, notchWidth - 20))
+                NotchShape(attached: true, radius: 26)
                     .fill(Color.black)
                     .overlay {
-                        NotchStageShape(neck: max(120, notchWidth - 20))
-                            .stroke(LinearGradient(colors: [.clear, .white.opacity(0.14)], startPoint: .top, endPoint: .bottom),
+                        NotchShape(attached: true, radius: 26)
+                            .stroke(LinearGradient(colors: [.clear, .clear, .white.opacity(0.12)], startPoint: .top, endPoint: .bottom),
                                     lineWidth: 1)
                     }
                 Group {
@@ -271,10 +327,13 @@ struct NotchStageView: View {
                     case .game: NotchFireflyGameView(game: model.game) { NotchStageController.shared.close() }
                     case .say(let text): NotchStageSayView(text: text, started: model.started)
                     case .board: NotchClaudeBoardView { NotchStageController.shared.close() }
+                    case .compose: NotchClaudeComposeView { NotchStageController.shared.close() }
+                    case .reflex: NotchReflexGameView(game: model.reflex) { NotchStageController.shared.close() }
                     case .hidden: Color.clear
                     }
                 }
-                .padding(.top, 16)
+                .padding(.top, model.topInset)
+                .padding(.horizontal, model.sideInset)
                 .opacity(model.open ? 1 : 0)
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
@@ -374,6 +433,34 @@ struct NotchStageActView: View {
             }
             NotchPixelSprite(state: .init(mood: burst ? .surprised : .thinking, frame: frame, accessory: .wizard, palette: look.palette))
                 .frame(width: sprite, height: sprite).offset(x: mid, y: floor - (burst ? 6 : 0))
+        case .skate:
+            let p = min(1, t / (act.length - 0.3))
+            let x = -sprite + (size.width + sprite * 2) * p
+            let jump = (0.42...0.58).contains(p) ? sin((p - 0.42) / 0.16 * .pi) * 22 : 0
+            Capsule().fill(Color(red: 0.95, green: 0.55, blue: 0.3)).frame(width: 40, height: 5)
+                .offset(x: x + 4, y: floor + sprite - 4 - jump)
+            ForEach(0..<2, id: \.self) { k in
+                Circle().fill(Color.white.opacity(0.8)).frame(width: 5, height: 5)
+                    .offset(x: x + 8 + CGFloat(k) * 26, y: floor + sprite - jump)
+            }
+            NotchPixelSprite(state: .init(mood: jump > 0 ? .surprised : .happy, frame: frame, accessory: look.accessory,
+                                          palette: look.palette))
+                .frame(width: sprite, height: sprite).offset(x: x, y: floor - 6 - jump)
+        case .stargaze:
+            ForEach(0..<14, id: \.self) { k in
+                let twinkle = 0.35 + 0.65 * abs(sin(t * 2 + Double(k)))
+                Circle().fill(Color.white.opacity(twinkle)).frame(width: k % 3 == 0 ? 2.5 : 1.5)
+                    .offset(x: CGFloat((k * 53) % 300) + 12, y: CGFloat((k * 29) % 40) + 2)
+            }
+            if t > 1.8 {
+                let s = min(1, (t - 1.8) / 0.7)
+                Capsule().fill(LinearGradient(colors: [.clear, .white], startPoint: .leading, endPoint: .trailing))
+                    .frame(width: 30, height: 2).rotationEffect(.degrees(20))
+                    .offset(x: 40 + 200 * s, y: 6 + 30 * s).opacity(1 - s * 0.6)
+            }
+            NotchPixelSprite(state: .init(mood: t > 2.2 ? .love : .thinking, frame: frame, accessory: look.accessory,
+                                          palette: look.palette))
+                .frame(width: sprite, height: sprite).offset(x: mid, y: floor)
         case .nap:
             let awake = t > 3.6
             NotchPixelSprite(state: .init(mood: awake ? (t > 4.3 ? .happy : .surprised) : .sleepy, frame: frame,
@@ -512,6 +599,7 @@ final class NotchFireflyGame: ObservableObject {
             best = score
             UserDefaults.standard.set(score, forKey: DefaultsKey.notchMascotGameBest)
         }
+        NotchMoodMeter.shared.note(.gamePlayed)
         onEnd()
     }
 }
@@ -608,5 +696,126 @@ struct NotchStageSayView: View {
             }
             .frame(maxWidth: .infinity)
         }
+    }
+}
+
+// MARK: Hoot!
+
+/// Hoo dozes; when it suddenly hoots, press as fast as you can. Five rounds,
+/// the average reaction time counts, a press before the hoot costs a round.
+final class NotchReflexGame: ObservableObject {
+    enum Phase: Equatable { case waiting, hoot, early, result(Int), over }
+    @Published private(set) var phase: Phase = .waiting
+    @Published private(set) var round = 0
+    @Published private(set) var times: [Int] = []
+    @Published private(set) var best = UserDefaults.standard.integer(forKey: DefaultsKey.notchMascotGameBestReflex)
+    @Published private(set) var frame = 0
+    private var hootAt: Date?
+    private var work: DispatchWorkItem?
+    private var ticker: Timer?
+    static let rounds = 5
+
+    var average: Int? { times.isEmpty ? nil : times.reduce(0, +) / times.count }
+
+    func begin() {
+        stop()
+        round = 0; times = []
+        best = UserDefaults.standard.integer(forKey: DefaultsKey.notchMascotGameBestReflex)
+        let ticker = Timer(timeInterval: 1 / NotchPixelHoo.fps, repeats: true) { [weak self] _ in self?.frame += 1 }
+        RunLoop.main.add(ticker, forMode: .common)
+        self.ticker = ticker
+        next()
+    }
+
+    func stop() { work?.cancel(); ticker?.invalidate(); ticker = nil }
+
+    private func next() {
+        guard round < Self.rounds else { finish(); return }
+        phase = .waiting
+        hootAt = nil
+        let delay = Double.random(in: 1.4...3.8)
+        let work = DispatchWorkItem { [weak self] in
+            self?.hootAt = Date()
+            self?.phase = .hoot
+        }
+        self.work = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    func press() {
+        switch phase {
+        case .waiting:
+            work?.cancel()
+            phase = .early
+            round += 1
+            after(0.9) { self.next() }
+        case .hoot:
+            let ms = Int((Date().timeIntervalSince(hootAt ?? Date())) * 1000)
+            times.append(ms)
+            round += 1
+            phase = .result(ms)
+            after(0.9) { self.next() }
+        case .over: begin()
+        default: break
+        }
+    }
+
+    private func after(_ seconds: Double, _ action: @escaping () -> Void) {
+        let work = DispatchWorkItem(block: action)
+        self.work = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+    }
+
+    private func finish() {
+        phase = .over
+        if let average, best == 0 || average < best {
+            best = average
+            UserDefaults.standard.set(average, forKey: DefaultsKey.notchMascotGameBestReflex)
+        }
+        NotchMoodMeter.shared.note(.gamePlayed)
+    }
+}
+
+struct NotchReflexGameView: View {
+    @ObservedObject var game: NotchReflexGame
+    let close: () -> Void
+
+    var body: some View {
+        let look = currentLook()
+        let mood: NotchMascotMood
+        let line: String
+        switch game.phase {
+        case .waiting: mood = .sleepy; line = "Wait for it…"
+        case .hoot: mood = .surprised; line = "HOOT! Click!"
+        case .early: mood = .confused; line = "Too soon!"
+        case .result(let ms): mood = ms < 300 ? .love : .happy; line = "\(ms) ms"
+        case .over:
+            mood = .happy
+            line = game.average.map { "Average \($0) ms" + ($0 == game.best ? " · new best!" : " · best \(game.best) ms") } ?? "No hits"
+        }
+        return HStack(spacing: 16) {
+            NotchPixelSprite(state: .init(mood: mood, frame: game.frame, accessory: look.accessory, palette: look.palette))
+                .frame(width: 64, height: 64)
+                .scaleEffect(game.phase == .hoot ? 1.12 : 1)
+                .animation(.spring(response: 0.2, dampingFraction: 0.5), value: game.phase == .hoot)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(line).font(.system(size: 17, weight: .heavy, design: .rounded))
+                    .foregroundStyle(game.phase == .hoot ? .yellow : .white)
+                Text(game.phase == .over ? "Click to play again · Esc to close"
+                     : "Round \(min(game.round + 1, NotchReflexGame.rounds)) of \(NotchReflexGame.rounds) · click or Space")
+                    .font(.system(size: 11)).foregroundStyle(.white.opacity(0.55))
+            }
+            Spacer()
+            Button(action: close) {
+                Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
+                    .frame(width: 22, height: 22).notchGlassChip(radius: 11)
+            }
+            .buttonStyle(NotchSquishButtonStyle())
+        }
+        .padding(.horizontal, 22)
+        .frame(maxHeight: .infinity)
+        .foregroundStyle(.white)
+        .contentShape(Rectangle())
+        .onTapGesture { game.press() }
     }
 }

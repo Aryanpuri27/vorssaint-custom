@@ -33,6 +33,7 @@ struct NotchView: View {
                 transaction.animation = .easeInOut(duration: NotchMascotMotion.restCrossfade)
             }
             .frame(width: service.surfaceSize.width, height: service.surfaceSize.height, alignment: .top)
+            .overlay(alignment: .top) { NotchPrivacyDots(service: service) }
             .foregroundStyle(.white)
             // The window server leaves SwiftUI content that ignores hit tests
             // out of its own hit test unless it is fully opaque. The backdrop
@@ -944,5 +945,31 @@ struct NotchActivityPicker: View {
                 .accessibilityIdentifier("notch.activity.\(activity.rawValue)")
             }
         }
+    }
+}
+
+/// Green while the camera is on, orange while the microphone is, just
+/// beside the camera on the closed island.
+struct NotchPrivacyDots: View {
+    @ObservedObject var service: NotchService
+    @ObservedObject private var privacy = NotchPrivacyMonitor.shared
+    @AppStorage(DefaultsKey.notchPrivacyDots) private var enabled = true
+
+    var body: some View {
+        if enabled, !service.expanded, !service.peeking, privacy.cameraInUse || privacy.microphoneInUse {
+            HStack(spacing: 3) {
+                if privacy.cameraInUse { dot(Color(red: 0.2, green: 0.85, blue: 0.35)) }
+                if privacy.microphoneInUse { dot(.orange) }
+            }
+            .frame(height: service.geometry.stripHeight)
+            .offset(x: -service.surfaceShift + service.geometry.cameraWidth / 2 + 10)
+            .allowsHitTesting(false)
+            .transition(.opacity)
+            .accessibilityLabel(privacy.cameraInUse ? "Camera in use" : "Microphone in use")
+        }
+    }
+
+    private func dot(_ color: Color) -> some View {
+        Circle().fill(color).frame(width: 5, height: 5).shadow(color: color, radius: 3)
     }
 }

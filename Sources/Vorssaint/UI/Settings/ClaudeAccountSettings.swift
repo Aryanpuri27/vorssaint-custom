@@ -10,6 +10,8 @@ struct ClaudeAccountSettings: View {
     @AppStorage(DefaultsKey.notchAgentsClaudeAllAccounts) private var allAccounts = true
     @AppStorage(DefaultsKey.claudeLiveEnabled) private var liveEnabled = true
     @AppStorage(DefaultsKey.claudeLiveAnswerInNotch) private var answerInNotch = true
+    @AppStorage(DefaultsKey.claudeRecap) private var recap = true
+    @AppStorage(DefaultsKey.claudeSpikeAlert) private var spike = true
     @ObservedObject private var live = ClaudeLiveService.shared
     @State private var hookRevision = 0
     @ObservedObject private var l10n = L10n.shared
@@ -49,7 +51,9 @@ struct ClaudeAccountSettings: View {
             Label(live.listening ? "Listening on 127.0.0.1:\(ClaudeLiveService.defaultPort)" : "Not listening: the port may be in use",
                   systemImage: live.listening ? "dot.radiowaves.left.and.right" : "exclamationmark.triangle")
                 .font(.caption).foregroundStyle(live.listening ? Color.secondary : Color.orange)
-            Toggle("Answer permission prompts from the notch", isOn: $answerInNotch)
+            Toggle("Answer permission prompts, questions and plans from the notch", isOn: $answerInNotch)
+            Toggle("Evening recap of the day’s Claude work", isOn: $recap)
+            Toggle("Warn me when Claude spending jumps", isOn: $spike)
             Text("A prompt waits up to \(Int(ClaudeLiveService.askHold)) seconds for Allow or Deny in the notch, then Claude Code asks in its own window as usual.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             ForEach(liveAccounts) { profile in

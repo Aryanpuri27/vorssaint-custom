@@ -62,7 +62,34 @@ struct NotchClaudeCardView: View {
         }
     }
 
-    private func askCard(_ ask: ClaudeLiveAsk) -> some View {
+    @ViewBuilder private func askCard(_ ask: ClaudeLiveAsk) -> some View {
+        if ask.answerable, let plan = ask.plan { planCard(ask, plan: plan) }
+        else if ask.answerable, !ask.questions.isEmpty { NotchClaudeQuestionCard(ask: ask, close: close) }
+        else { permissionCard(ask) }
+    }
+
+    private func planCard(_ ask: ClaudeLiveAsk, plan: String) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            header(symbol: "list.bullet.clipboard", title: "Claude’s plan", project: ask.project, account: ask.account)
+            ScrollView {
+                Text((try? AttributedString(markdown: plan, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+                     ?? AttributedString(plan))
+                    .font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.85))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: .infinity)
+            .padding(.horizontal, 10).padding(.vertical, 7)
+            .notchGlassChip(radius: 10, fill: 0.07)
+            HStack(spacing: 8) {
+                chip("Open", symbol: "arrow.up.forward.app") { live.focus(ask.sessionID); close() }
+                Spacer()
+                chip("Keep planning", symbol: "arrow.uturn.backward") { live.approvePlan(ask.id, false) }
+                chip("Approve", symbol: "checkmark", prominent: true) { live.approvePlan(ask.id, true) }
+            }
+        }
+    }
+
+    private func permissionCard(_ ask: ClaudeLiveAsk) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             header(symbol: "hand.raised.fill", title: ask.answerable ? "Claude wants to use \(ask.tool)" : "Claude needs you",
                    project: ask.project, account: ask.account)
@@ -214,5 +241,171 @@ struct NotchClaudeBoardView: View {
     private func copy(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+    }
+}
+
+/// Claude's multiple-choice questions, one at a time, answered in place.
+struct NotchClaudeQuestionCard: View {
+    let ask: ClaudeLiveAsk
+    let close: () -> Void
+    @ObservedObject private var live = ClaudeLiveService.shared
+    @State private var page = 0
+    @State private var picked: [Int: Set<String>] = [:]
+
+    var body: some View {
+        let question = ask.questions[min(page, ask.questions.count - 1)]
+        let chosen = picked[page] ?? []
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "questionmark.bubble.fill").foregroundStyle(NotchClaudeStyle.accent)
+                Text(question.header.isEmpty ? "Claude asks" : question.header).font(.system(size: 13, weight: .semibold))
+                NotchClaudeBadge(text: ask.account)
+                Spacer()
+                if ask.questions.count > 1 {
+                    Text("\(page + 1)/\(ask.questions.count)").font(.system(size: 11)).monospacedDigit().foregroundStyle(.white.opacity(0.5))
+                }
+            }
+            Text(question.question).font(.system(size: 12.5)).foregroundStyle(.white.opacity(0.9)).lineLimit(2)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(question.options, id: \.self) { option in
+                        let on = chosen.contains(option)
+                        Button {
+                            var set = chosen
+                            if question.multiSelect { if on { set.remove(option) } else { set.insert(option) } } else { set = [option] }
+                            picked[page] = set
+                            if !question.multiSelect { advance() }
+                        } label: {
+                            Text(option).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                                .padding(.horizontal, 12).frame(height: 28)
+                                .background(on ? NotchClaudeStyle.accent.opacity(0.85) : .clear, in: Capsule())
+                                .modifier(NotchGlassChip(shape: Capsule(), fill: on ? 0 : 0.12))
+                        }
+                        .buttonStyle(NotchSquishButtonStyle())
+                    }
+                }
+            }
+            HStack {
+                Button("Answer in Claude instead") { live.answer(ask.id, allow: nil); live.focus(ask.sessionID); close() }
+                    .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
+                Spacer()
+                if question.multiSelect {
+                    Button("Next") { advance() }.buttonStyle(.plain).font(.system(size: 12, weight: .semibold))
+                        .disabled(chosen.isEmpty)
+                }
+            }
+        }
+    }
+
+    private func advance() {
+        if page + 1 < ask.questions.count { withAnimation(.smooth(duration: 0.25)) { page += 1 }; return }
+        var answers: [String: String] = [:]
+        for (index, question) in ask.questions.enumerated() {
+            let set = picked[index] ?? []
+            answers[question.question] = question.options.filter(set.contains).joined(separator: ", ")
+        }
+        live.answer(ask.id, choices: answers)
+    }
+}
+
+/// A Claude Code task started from the notch: where, as whom, and what.
+struct NotchClaudeComposeView: View {
+    let close: () -> Void
+    @ObservedObject private var extras = NotchClaudeExtras.shared
+    @State private var prompt = ""
+    @State private var folder = NotchClaudeExtras.shared.recentFolders.first ?? ""
+    @State private var account = ""
+    @State private var allowEdits = false
+    @FocusState private var focused: Bool
+
+    private var accounts: [ClaudeAccountProfile] {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let usual = AgentLogRoot.canonical(home.appending(path: ".claude")).path
+        return [ClaudeAccountProfile()] + ClaudeAccountProfile.discover(home: home)
+            .filter { AgentLogRoot.canonical(URL(fileURLWithPath: $0.directory)).path != usual }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "plus.bubble.fill").foregroundStyle(NotchClaudeStyle.accent)
+                Text("New Claude task").font(.system(size: 13, weight: .semibold))
+                Spacer()
+                Menu {
+                    ForEach(extras.recentFolders, id: \.self) { path in
+                        Button(URL(fileURLWithPath: path).lastPathComponent) { folder = path }
+                    }
+                    Divider()
+                    Button("Choose folder…") { choose() }
+                } label: {
+                    Label(folder.isEmpty ? "Project" : URL(fileURLWithPath: folder).lastPathComponent, systemImage: "folder")
+                        .font(.system(size: 11.5, weight: .medium))
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                Picker("", selection: $account) {
+                    ForEach(accounts) { profile in
+                        Text(profile.isDefault ? "office" : profile.name(defaultName: "office")).tag(profile.directory)
+                    }
+                }
+                .labelsHidden().fixedSize().controlSize(.small)
+                Button(action: close) {
+                    Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
+                        .frame(width: 22, height: 22).notchGlassChip(radius: 11)
+                }
+                .buttonStyle(NotchSquishButtonStyle())
+            }
+            ZStack(alignment: .topLeading) {
+                if prompt.isEmpty {
+                    Text("What should Claude do?").font(.system(size: 12.5)).foregroundStyle(.white.opacity(0.35))
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                }
+                TextEditor(text: $prompt)
+                    .font(.system(size: 12.5))
+                    .scrollContentBackground(.hidden)
+                    .focused($focused)
+            }
+            .padding(8)
+            .frame(maxHeight: .infinity)
+            .notchGlassChip(radius: 10, fill: 0.07)
+            HStack(spacing: 10) {
+                Toggle("Allow file edits", isOn: $allowEdits).toggleStyle(.checkbox).font(.system(size: 11.5))
+                if let running = extras.tasks.first(where: { $0.status == .running }) {
+                    Label("\(running.project) running", systemImage: "hourglass").font(.system(size: 11)).foregroundStyle(.white.opacity(0.6))
+                    Button("Stop") { extras.stop(running.id) }.buttonStyle(.plain).font(.system(size: 11, weight: .semibold))
+                } else if let last = extras.tasks.first, !last.result.isEmpty {
+                    Button("Copy last result") { extras.copyResult(last.id) }.buttonStyle(.plain).font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+                Spacer()
+                Button {
+                    let profile = accounts.first { $0.directory == account } ?? ClaudeAccountProfile()
+                    extras.run(prompt: prompt, folder: folder, profile: profile, allowEdits: allowEdits)
+                    close()
+                } label: {
+                    Label("Run", systemImage: "paperplane.fill").font(.system(size: 12, weight: .semibold))
+                        .padding(.horizontal, 14).frame(height: 28)
+                        .background(NotchClaudeStyle.accent.opacity(0.85), in: Capsule())
+                }
+                .buttonStyle(NotchSquishButtonStyle())
+                .disabled(folder.isEmpty || prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .keyboardShortcut(.return, modifiers: .command)
+            }
+        }
+        .padding(.horizontal, 18)
+        .foregroundStyle(.white)
+        .onAppear {
+            if account.isEmpty, let personal = accounts.first(where: { !$0.isDefault }) { account = personal.directory }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { focused = true }
+        }
+    }
+
+    private func choose() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.prompt = "Use folder"
+        NSApp.activate()
+        if panel.runModal() == .OK, let url = panel.url { folder = url.path }
     }
 }

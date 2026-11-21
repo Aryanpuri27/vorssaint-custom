@@ -37,6 +37,13 @@ struct ClaudeLiveSession: Identifiable, Equatable {
     var elapsed: TimeInterval? { promptStarted.map { Date().timeIntervalSince($0) } }
 }
 
+struct ClaudeLiveQuestion: Equatable {
+    let question: String
+    let header: String
+    let options: [String]
+    let multiSelect: Bool
+}
+
 struct ClaudeLiveAsk: Identifiable, Equatable {
     let id: String
     let sessionID: String
@@ -47,6 +54,12 @@ struct ClaudeLiveAsk: Identifiable, Equatable {
     let created: Date
     /// Whether the session waits for the notch's answer; a notice only otherwise.
     let answerable: Bool
+    /// Claude asking you to choose (AskUserQuestion).
+    var questions: [ClaudeLiveQuestion] = []
+    /// A plan waiting for approval (ExitPlanMode).
+    var plan: String?
+    /// The tool's input as sent, for answers that hand it back.
+    var input: Data = Data()
 }
 
 final class ClaudeLiveService: ObservableObject {
@@ -61,6 +74,8 @@ final class ClaudeLiveService: ObservableObject {
     @Published private(set) var asks: [ClaudeLiveAsk] = []
     @Published private(set) var listening = false
     @Published private(set) var lastSummary: (sessionID: String, text: String)?
+    /// Today's tally across every connected account, for the evening recap.
+    @Published private(set) var today = (day: "", tasks: 0, edits: 0, commands: 0)
 
     private var listener: NWListener?
     private var waiting: [String: (Data) -> Void] = [:]
@@ -282,6 +297,10 @@ final class ClaudeLiveService: ObservableObject {
             session.lastMessage = (json["last_assistant_message"] as? String).map(Self.firstLine)
             let summary = Self.summary(session)
             sessions[index] = session
+            let day = Calendar.current.startOfDay(for: Date()).description
+            if today.day != day { today = (day, 0, 0, 0) }
+            today.tasks += 1; today.edits += session.edits; today.commands += session.commands
+            NotchMoodMeter.shared.note(.taskDone)
             lastSummary = (session.id, summary)
             asks.removeAll { $0.sessionID == session.id && !$0.answerable }
             NotchService.shared.claudeFinished(sessionID: session.id, project: session.project, account: session.account,
@@ -301,10 +320,20 @@ final class ClaudeLiveService: ObservableObject {
         sessions[index].status = .waiting
         let tool = json["tool_name"] as? String ?? "Tool"
         let input = json["tool_input"] as? [String: Any] ?? [:]
-        let ask = ClaudeLiveAsk(id: UUID().uuidString, sessionID: sessions[index].id, tool: tool,
+        var ask = ClaudeLiveAsk(id: UUID().uuidString, sessionID: sessions[index].id, tool: tool,
                                 summary: Self.describe(tool: tool, input: input, long: true).0,
                                 project: sessions[index].project, account: sessions[index].account, created: Date(),
                                 answerable: Self.answersInNotch)
+        ask.input = (try? JSONSerialization.data(withJSONObject: input)) ?? Data()
+        if tool == "AskUserQuestion" {
+            ask.questions = (input["questions"] as? [[String: Any]] ?? []).prefix(4).map { question in
+                ClaudeLiveQuestion(question: question["question"] as? String ?? "",
+                                   header: question["header"] as? String ?? "",
+                                   options: (question["options"] as? [[String: Any]] ?? []).compactMap { $0["label"] as? String },
+                                   multiSelect: question["multiSelect"] as? Bool ?? false)
+            }
+        }
+        if tool == "ExitPlanMode" { ask.plan = input["plan"] as? String ?? "" }
         present(ask)
         return ask.answerable ? ask : nil
     }
@@ -314,8 +343,24 @@ final class ClaudeLiveService: ObservableObject {
         NotchService.shared.claudeAsks(ask)
     }
 
+    /// Answers Claude's questions with the chosen option labels, by question.
+    func answer(_ id: String, choices: [String: String]) {
+        guard let ask = asks.first(where: { $0.id == id }) else { return }
+        var input = (try? JSONSerialization.jsonObject(with: ask.input)) as? [String: Any] ?? [:]
+        input["answers"] = choices
+        answer(id, allow: true, updatedInput: input)
+    }
+
+    /// Approves a plan, or sends Claude back to keep planning.
+    func approvePlan(_ id: String, _ approve: Bool) {
+        guard let ask = asks.first(where: { $0.id == id }) else { return }
+        let input = (try? JSONSerialization.jsonObject(with: ask.input)) as? [String: Any] ?? [:]
+        if approve { answer(id, allow: true, updatedInput: input) }
+        else { answer(id, allow: false, message: "Not approved yet: keep planning and refine the plan.") }
+    }
+
     /// Allow, deny, or nil to let Claude Code ask in its own window.
-    func answer(_ id: String, allow: Bool?) {
+    func answer(_ id: String, allow: Bool?, updatedInput: [String: Any]? = nil, message: String? = nil) {
         if let ask = asks.first(where: { $0.id == id }), let index = sessions.firstIndex(where: { $0.id == ask.sessionID }) {
             sessions[index].status = allow == nil ? .waiting : .working
         }
@@ -323,7 +368,8 @@ final class ClaudeLiveService: ObservableObject {
         guard let reply = waiting.removeValue(forKey: id) else { return }
         guard let allow else { reply(Data("{}".utf8)); return }
         var decision: [String: Any] = ["behavior": allow ? "allow" : "deny"]
-        if !allow { decision["message"] = "Denied from the notch." }
+        if !allow { decision["message"] = message ?? "Denied from the notch." }
+        if allow, let updatedInput { decision["updatedInput"] = updatedInput }
         let body = ["hookSpecificOutput": ["hookEventName": "PermissionRequest", "decision": decision]]
         reply((try? JSONSerialization.data(withJSONObject: body)) ?? Data("{}".utf8))
         NotchService.shared.claudeAnswered()

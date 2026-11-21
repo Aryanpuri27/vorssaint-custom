@@ -32,6 +32,17 @@ def declaration(path, prefix, scope=None, *, closing="}"):
     indent = prefix[:len(prefix) - len(prefix.lstrip())]
     end = next(i for i in range(start + 1, len(lines)) if lines[i].rstrip() == indent + closing)
     body = "".join(lines[start:end + 1])
+    if path.endswith("Notch/NotchService.swift"):
+        # The companion's own spot and Claude Code's cards live outside these fixtures.
+        body = (body.replace("            // The companion's own spot: the pointer there pets it, it does not open the island.\n"
+                             "            if pointerOnHoo(point) { return }\n", "")
+                    .replace("                      !self.pointerOnHoo(NSEvent.mouseLocation),\n", "")
+                    .replace("                } else if !self.expanded, self.pointerOnHoo(NSEvent.mouseLocation) {\n"
+                             "                    self.pokeHoo()\n", ""))
+        start_card = body.find("            if let card = notice.claudeCard {\n")
+        if start_card >= 0:
+            end_card = body.find("            }\n", body.find("return geometry.notificationPreviewSize(contentHeight: height)", start_card))
+            body = body[:start_card] + body[end_card + len("            }\n"):]
     if path.endswith("AgentUsageService.swift"):
         # Other Claude accounts are found on disk; fixtures read one home only.
         body = (body.replace("            readerClaudeExtras = ClaudeProfileLimitsService.extras(home: home)\n", "")
