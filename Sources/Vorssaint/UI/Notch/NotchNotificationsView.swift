@@ -9,6 +9,9 @@ struct NotchNotificationsView: View {
     @ObservedObject private var service = NotchNotificationService.shared
     @ObservedObject private var permissions = Permissions.shared
     @ObservedObject private var l10n = L10n.shared
+    /// Several messages rest as a stack; a click fans them out.
+    @State private var fanned = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var text: NotchNotificationStrings { FeatureStrings.notchNotifications(l10n.language) }
 
     var body: some View {
@@ -31,6 +34,8 @@ struct NotchNotificationsView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if service.items.count > 1, !fanned {
+                stack
             } else {
                 let rows = NotchLayout.railRows(count: service.items.count,
                                                 perRow: NotchLayout.railCapacity(width: size.width, itemWidth: 240, spacing: 8),
@@ -43,7 +48,47 @@ struct NotchNotificationsView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .overlay(alignment: .bottomTrailing) {
+            if fanned, service.items.count > 1 {
+                Button { withAnimation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.8)) { fanned = false } } label: {
+                    Label("Stack", systemImage: "square.stack").font(.system(size: 11, weight: .semibold))
+                        .padding(.horizontal, 10).frame(height: 24)
+                        .modifier(NotchGlassChip(shape: Capsule(), fill: 0.16))
+                }
+                .buttonStyle(NotchSquishButtonStyle())
+            }
+        }
         .environment(\.locale, l10n.language.formattingLocale())
+        .onChange(of: service.items.count) { _, count in if count < 2 { fanned = false } }
+    }
+
+    /// The newest message on top of the others, the way a phone piles them.
+    private var stack: some View {
+        let items = Array(service.items.prefix(3))
+        let width = min(size.width, 400)
+        let height = min(size.height - 14, 150)
+        return ZStack(alignment: .top) {
+            ForEach(Array(items.enumerated().reversed()), id: \.element.id) { index, item in
+                NotchNotificationRow(item: item, service: service, text: text)
+                    .frame(width: width, height: height)
+                    .scaleEffect(1 - CGFloat(index) * 0.05, anchor: .bottom)
+                    .offset(y: CGFloat(index) * 7)
+                    .opacity(index == 0 ? 1 : 0.7 - Double(index) * 0.15)
+                    .allowsHitTesting(index == 0)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .overlay(alignment: .bottom) {
+            Button { withAnimation(reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.78)) { fanned = true } } label: {
+                Label("\(service.items.count) notifications", systemImage: "rectangle.stack")
+                    .font(.system(size: 11, weight: .semibold))
+                    .padding(.horizontal, 10).frame(height: 24)
+                    .background(Color.black.opacity(0.6), in: Capsule())
+                    .modifier(NotchGlassChip(shape: Capsule(), fill: 0.14))
+            }
+            .buttonStyle(NotchSquishButtonStyle())
+            .offset(y: 4)
+        }
     }
 }
 

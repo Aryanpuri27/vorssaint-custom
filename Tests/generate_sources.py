@@ -38,7 +38,9 @@ def declaration(path, prefix, scope=None, *, closing="}"):
                              "            if pointerOnHoo(point) { return }\n", "")
                     .replace("                      !self.pointerOnHoo(NSEvent.mouseLocation),\n", "")
                     .replace("                } else if !self.expanded, self.pointerOnHoo(NSEvent.mouseLocation) {\n"
-                             "                    self.pokeHoo()\n", ""))
+                             "                    self.pokeHoo()\n", "")
+                    .replace("handleVolumeScroll(event) || handleSectionScroll(event) || handlePageSwipe(event) || handleGesture(event)",
+                             "handleSectionScroll(event) || handleGesture(event)"))
         start_card = body.find("            if let card = notice.claudeCard {\n")
         if start_card >= 0:
             end_card = body.find("            }\n", body.find("return geometry.notificationPreviewSize(contentHeight: height)", start_card))

@@ -4096,7 +4096,7 @@ final class NotchService: ObservableObject {
     /// The gallery steps its rows from the wheel; every other scroll over the
     /// island is a gesture candidate.
     private func handleScroll(_ event: NSEvent) -> Bool {
-        handleSectionScroll(event) || handleGesture(event)
+        handleVolumeScroll(event) || handleSectionScroll(event) || handlePageSwipe(event) || handleGesture(event)
     }
 
     private func handleSectionScroll(_ event: NSEvent) -> Bool {
@@ -5449,3 +5449,58 @@ extension NotchService {
         }
     }
 }
+
+// MARK: Gestures: volume and pages
+
+private var pageSwipe: (x: CGFloat, fired: Bool) = (0, false)
+
+extension NotchService {
+    /// Option-scroll over the island turns the volume up or down.
+    fileprivate func handleVolumeScroll(_ event: NSEvent) -> Bool {
+        guard running, !suspended, let panel, event.modifierFlags.intersection([.command, .control, .option, .shift]) == .option
+        else { return false }
+        let point = panel.convertPoint(toScreen: event.locationInWindow)
+        guard windowHost?.contains(point) == true, let current = NotchSystemVolume.get() else { return false }
+        let raw = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY * 0.004 : event.scrollingDeltaY * 0.0625
+        let delta = event.isDirectionInvertedFromDevice ? raw : -raw
+        let next = max(0, min(1, Double(current) + Double(delta)))
+        NotchSystemVolume.set(Float(next))
+        if !expanded { showVolume(next) }
+        return true
+    }
+
+    /// A two-finger swipe sideways on an open page moves to the next or previous
+    /// section; on the closed island it steps through the live activities.
+    fileprivate func handlePageSwipe(_ event: NSEvent) -> Bool {
+        if !expanded, !peeking, compactActivities.count > 1, let current = compactActivity, compactActivity != .music,
+           event.hasPreciseScrollingDeltas, event.momentumPhase.isEmpty, let panel,
+           windowHost?.contains(panel.convertPoint(toScreen: event.locationInWindow)) == true,
+           abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) * 1.5 || pageSwipe.x != 0 {
+            if event.phase.contains(.began) { pageSwipe = (0, false) }
+            pageSwipe.x += event.scrollingDeltaX * (event.isDirectionInvertedFromDevice ? 1 : -1)
+            if !pageSwipe.fired, abs(pageSwipe.x) > 60, let index = compactActivities.firstIndex(of: current) {
+                pageSwipe.fired = true
+                let step = pageSwipe.x > 0 ? -1 : 1
+                selectCompactActivity(compactActivities[(index + step + compactActivities.count) % compactActivities.count])
+            }
+            if !event.phase.intersection([.ended, .cancelled]).isEmpty { pageSwipe = (0, false) }
+            return true
+        }
+        guard running, !suspended, expanded, !showingSections, !showingCommandBar, selected != .music,
+              event.hasPreciseScrollingDeltas, event.momentumPhase.isEmpty, let panel,
+              event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty else { return false }
+        if event.phase.contains(.began) { pageSwipe = (0, false) }
+        let interaction = NotchGestureSupport.nativeInteraction(at: panel.contentView?.hitTest(event.locationInWindow))
+        guard !interaction.scroll, !interaction.control, abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) * 1.5 || pageSwipe.x != 0
+        else { return false }
+        pageSwipe.x += event.scrollingDeltaX * (event.isDirectionInvertedFromDevice ? 1 : -1)
+        if !pageSwipe.fired, abs(pageSwipe.x) > 90, let index = modules.firstIndex(of: selected), modules.count > 1 {
+            pageSwipe.fired = true
+            let step = pageSwipe.x > 0 ? -1 : 1
+            select(modules[(index + step + modules.count) % modules.count])
+        }
+        if !event.phase.intersection([.ended, .cancelled]).isEmpty { pageSwipe = (0, false) }
+        return true
+    }
+}
+

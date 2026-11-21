@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Vorssaint
 
+import AudioToolbox
 import Combine
 import CoreAudio
 import CoreMediaIO
@@ -81,5 +82,38 @@ enum NotchQuiet {
         let start = defaults.integer(forKey: DefaultsKey.notchQuietStart), end = defaults.integer(forKey: DefaultsKey.notchQuietEnd)
         let hour = Calendar.current.component(.hour, from: Date())
         return start == end ? false : start < end ? (start..<end).contains(hour) : (hour >= start || hour < end)
+    }
+}
+
+/// The default output's volume, read and set through Core Audio.
+enum NotchSystemVolume {
+    private static func device() -> AudioObjectID? {
+        var device = AudioObjectID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioObjectID>.size)
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+                                                 mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &device) == noErr,
+              device != kAudioObjectUnknown else { return nil }
+        return device
+    }
+
+    private static var address = AudioObjectPropertyAddress(mSelector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
+                                                            mScope: kAudioDevicePropertyScopeOutput,
+                                                            mElement: kAudioObjectPropertyElementMain)
+
+    static func get() -> Float? {
+        guard let device = device() else { return nil }
+        var volume: Float32 = 0
+        var size = UInt32(MemoryLayout<Float32>.size)
+        var address = address
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &volume) == noErr else { return nil }
+        return volume
+    }
+
+    static func set(_ volume: Float) {
+        guard let device = device() else { return }
+        var value = Float32(volume)
+        var address = address
+        AudioObjectSetPropertyData(device, &address, 0, nil, UInt32(MemoryLayout<Float32>.size), &value)
     }
 }
