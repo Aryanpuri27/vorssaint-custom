@@ -288,6 +288,7 @@ final class NotchMascotRig: NSObject {
 
     private func syncPixelTimer() {
         let wanted = look.style == .hoo && pixelVisible && !reduceMotion && size > 0
+            && !ProcessInfo.processInfo.isLowPowerModeEnabled
         guard wanted != (pixelTimer != nil) else { return }
         if wanted {
             let timer = Timer(timeInterval: 1 / NotchPixelHoo.fps, repeats: true) { [weak self] _ in self?.tickPixel() }

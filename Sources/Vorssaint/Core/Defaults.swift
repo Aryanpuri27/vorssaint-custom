@@ -1000,6 +1000,9 @@ enum DefaultsKey {
     static let notchMascotShows = "notchMascotShows" // now and then the companion drops out of the notch to perform
     static let notchMascotGameBest = "notchMascotGameBest" // best score in the companion's mini game
     static let notchQuickAccessDocked = "notchQuickAccessDocked" // quick buttons live in the island's dock, not around it
+    static let claudeLiveEnabled = "claudeLiveEnabled" // listen for Claude Code's hooks on 127.0.0.1
+    static let claudeLiveAnswerInNotch = "claudeLiveAnswerInNotch" // permission prompts wait for Allow or Deny in the notch
+    static let claudeLiveToken = "claudeLiveToken" // the secret Claude Code's hooks send; local only
     static let notchMascotSide = "notchMascotSide" // NotchMascotSide.rawValue, beside the camera
     static let notchMascotVisitFrequency = "notchMascotVisitFrequency" // NotchMascotVisitFrequency.rawValue
     static let notchMascotHidesWhenIdle = "notchMascotHidesWhenIdle" // hops into the island after a quiet while
@@ -1616,6 +1619,8 @@ enum Defaults {
         DefaultsKey.notchMascotShows: true,
         DefaultsKey.notchMascotGameBest: 0,
         DefaultsKey.notchQuickAccessDocked: true,
+        DefaultsKey.claudeLiveEnabled: true,
+        DefaultsKey.claudeLiveAnswerInNotch: true,
         DefaultsKey.notchMascotSide: NotchMascotSide.left.rawValue,
         DefaultsKey.notchMascotVisitFrequency: NotchMascotVisitFrequency.normal.rawValue,
         DefaultsKey.notchMascotHidesWhenIdle: true,

@@ -183,15 +183,22 @@ struct NotchSectionsButton: View {
     var body: some View {
         let items = self.items
         let companion = !preview && NotchMascotSupport.isEnabled()
+        let claude = !preview && ClaudeLiveService.shared.listening
         NotchIconButton(symbol: "square.grid.2x2", title: FeatureStrings.notch(l10n.language).sectionsTitle,
                         selected: open, action: action)
             .overlay(alignment: .top) {
-                if open, !items.isEmpty || companion {
+                if open, !items.isEmpty || companion || claude {
                     VStack(spacing: 4) {
                         ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                             NotchIconButton(symbol: item.symbol, title: item.title(l10n)) {
                                 open = false
                                 NotchService.shared.activateQuickAction(item)
+                            }
+                        }
+                        if !preview, ClaudeLiveService.shared.listening {
+                            NotchIconButton(symbol: "sparkles.rectangle.stack", title: "Claude sessions") {
+                                open = false
+                                NotchStageController.shared.showBoard()
                             }
                         }
                         if companion {

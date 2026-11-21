@@ -22,6 +22,8 @@ struct NotchNotice: Equatable {
     /// A banner that replaces one still on screen keeps at least its wings,
     /// so a burst of messages does not resize the island with each one.
     var minimumWings = NotchNoticeWings.zero
+    /// A Claude Code card the notice opens to: "ask:<id>" or "done:<session>".
+    var claudeCard: String? = nil
 
     enum ClickTarget: Hashable {
         case event(NotchEvent, title: String, detail: String?)
@@ -980,6 +982,9 @@ final class NotchService: ObservableObject {
             if notice.event == .track, notice.notification == nil {
                 return geometry.notificationPreviewSize(contentHeight: NotchSongPopLayout.contentHeight)
             }
+            if let card = notice.claudeCard {
+                return geometry.notificationPreviewSize(contentHeight: card.hasPrefix("ask:") ? 116 : 96)
+            }
             return geometry.notificationPreviewSize(
                 contentHeight: notice.previewContentHeight(width: geometry.notificationPreviewContentWidth))
         }
@@ -1166,6 +1171,7 @@ final class NotchService: ObservableObject {
         if !running {
             running = true
             NotchStageController.shared.start()
+            ClaudeLiveService.shared.start()
             installObservers()
         }
         syncShortcut()
@@ -2385,7 +2391,7 @@ final class NotchService: ObservableObject {
     private func scheduleAutoExpand(for incoming: NotchNotice) {
         autoExpandWork?.cancel(); autoExpandWork = nil
         guard UserDefaults.standard.object(forKey: DefaultsKey.notchAutoExpand) as? Bool ?? true,
-              incoming.notification != nil || incoming.event == .track else { return }
+              incoming.notification != nil || incoming.event == .track || incoming.claudeCard != nil else { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.autoExpandWork = nil
@@ -2394,7 +2400,9 @@ final class NotchService: ObservableObject {
                   !self.hiddenUntilHover, let shown = self.notice, shown.clickTarget == incoming.clickTarget else { return }
             if incoming.event == .track, NotchMusicService.shared.playback?.isPlaying != true { return }
             self.mutatePresentation(transitionContent: .reveal) { self.noticeExpanded = true }
-            self.scheduleNoticeDismissal(after: incoming.event == .track ? 4.5 : 6)
+            let hold: TimeInterval = incoming.claudeCard?.hasPrefix("ask:") == true ? ClaudeLiveService.askHold + 1
+                : incoming.claudeCard != nil ? 8 : incoming.event == .track ? 4.5 : 6
+            self.scheduleNoticeDismissal(after: hold)
         }
         autoExpandWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
@@ -5359,4 +5367,33 @@ extension NSScreen {
     var notchDisplayID: CGDirectDisplayID {
         (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
     }
+}
+
+// MARK: Claude Code, live
+
+extension NotchService {
+    /// Claude Code asks for something: a permission, an answer, or just you.
+    func claudeAsks(_ ask: ClaudeLiveAsk) {
+        reactMascot(.surprised, patience: 3)
+        if ask.tool == "Waiting" {
+            NotchStageController.shared.say("\(ask.project) is waiting for you")
+            return
+        }
+        let title = ask.answerable ? "Allow \(ask.tool)?" : "Claude needs you"
+        show(NotchNotice(event: .agents, title: title, detail: ask.project, symbol: "hand.raised.fill",
+                         agent: .claude, claudeCard: "ask:" + ask.id))
+    }
+
+    func claudeAnswered() {
+        if notice?.claudeCard?.hasPrefix("ask:") == true { collapse() }
+        reactMascot(.perk, patience: 2)
+    }
+
+    func claudeFinished(sessionID: String, project: String, account: String, summary: String) {
+        show(NotchNotice(event: .agents, title: "Claude finished", detail: project, symbol: "checkmark.circle.fill",
+                         agent: .claude, claudeCard: "done:" + sessionID))
+    }
+
+    /// Each tool call; the companion keeps an eye on the work.
+    func claudeStepped(tool: String) {}
 }

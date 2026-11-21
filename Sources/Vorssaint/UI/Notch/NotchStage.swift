@@ -23,7 +23,7 @@ private final class NotchStagePanel: NSPanel {
 }
 
 final class NotchStageModel: ObservableObject {
-    enum Mode: Equatable { case hidden, act(NotchStageAct), game }
+    enum Mode: Equatable { case hidden, act(NotchStageAct), game, say(String), board }
 
     @Published var mode: Mode = .hidden
     @Published var open = false
@@ -58,6 +58,7 @@ final class NotchStageController {
 
     private var showsEnabled: Bool {
         NotchMascotSupport.isEnabled() && UserDefaults.standard.object(forKey: DefaultsKey.notchMascotShows) as? Bool ?? true
+            && !ProcessInfo.processInfo.isLowPowerModeEnabled
     }
 
     /// The island is closed, on screen and quiet: nothing would be covered.
@@ -80,8 +81,29 @@ final class NotchStageController {
         perform(.dance)
     }
 
+    /// The companion says something in a bubble under the notch.
+    func say(_ text: String) {
+        guard NotchMascotSupport.isEnabled(), model.mode == .hidden || { if case .say = model.mode { return true }; return false }(),
+              !NotchService.shared.fullscreenCompact else { return }
+        present(.say(text), size: CGSize(width: max(220, min(420, CGFloat(text.count) * 7.2 + 110)), height: 64), interactive: false)
+        closeWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.close() }
+        closeWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: work)
+    }
+
+    /// Every Claude Code session, live.
+    func showBoard() {
+        closeWork?.cancel()
+        if NotchService.shared.expanded { NotchService.shared.collapse() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            let rows = CGFloat(max(1, min(4, ClaudeLiveService.shared.sessions.count)))
+            self?.present(.board, size: CGSize(width: 460, height: 70 + rows * 52), interactive: true)
+        }
+    }
+
     func perform(_ act: NotchStageAct) {
-        guard model.mode == .hidden || model.mode != .game else { return }
+        guard model.mode != .game, model.mode != .board else { return }
         lastShow = Date()
         present(.act(act), size: Self.actSize, interactive: false)
         closeWork?.cancel()
@@ -141,7 +163,8 @@ final class NotchStageController {
         if interactive {
             panel.makeKey()
             keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                guard let self, self.model.mode == .game else { return event }
+                guard let self, self.model.mode == .game || self.model.mode == .board else { return event }
+                if self.model.mode == .board { if event.keyCode == 53 { self.close(); return nil }; return event }
                 switch event.keyCode {
                 case 53: self.close(); return nil                       // Escape
                 case 49, 126: self.model.game.flap(); return nil         // Space, up arrow
@@ -222,6 +245,8 @@ struct NotchStageView: View {
                     switch model.mode {
                     case .act(let act): NotchStageActView(act: act, started: model.started)
                     case .game: NotchFireflyGameView(game: model.game) { NotchStageController.shared.close() }
+                    case .say(let text): NotchStageSayView(text: text, started: model.started)
+                    case .board: NotchClaudeBoardView { NotchStageController.shared.close() }
                     case .hidden: Color.clear
                     }
                 }
@@ -534,5 +559,30 @@ struct NotchFireflyGameView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { game.flap() }
+    }
+}
+
+/// The companion and a line of speech.
+struct NotchStageSayView: View {
+    let text: String
+    let started: Date
+
+    var body: some View {
+        TimelineView(.periodic(from: started, by: 1 / NotchPixelHoo.fps)) { context in
+            let frame = Int(context.date.timeIntervalSince(started) * NotchPixelHoo.fps)
+            let look = currentLook()
+            HStack(spacing: 10) {
+                NotchPixelSprite(state: .init(mood: frame < 10 ? .surprised : .happy, frame: frame,
+                                              accessory: look.accessory, palette: look.palette))
+                    .frame(width: 34, height: 34)
+                Text(text)
+                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .notchGlassChip(radius: 12, fill: 0.1)
+            }
+            .frame(maxWidth: .infinity)
+        }
     }
 }
