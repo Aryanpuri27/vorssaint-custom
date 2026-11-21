@@ -294,10 +294,16 @@ enum NotchAgentSupport {
     /// Codex homes the person added take the place of Codex's one limits
     /// card, the usual home among them when they add it.
     static func tiles(cards: [NotchAgentCard], providers: [AgentProvider],
-                      codexAccounts: [String] = [], claudeAccount: String? = nil) -> [NotchAgentTile] {
+                      codexAccounts: [String] = [], claudeAccount: String? = nil,
+                      claudeAccounts: [String] = []) -> [NotchAgentTile] {
         cards.flatMap { card -> [NotchAgentTile] in
             switch card {
             case .limits: return providers.filter(\.reportsLimits).flatMap { provider -> [NotchAgentTile] in
+                // More than one Claude account: a named card for each.
+                if provider == .claude, !claudeAccounts.isEmpty {
+                    return [NotchAgentTile(card: .limits, provider: provider, accountID: claudeAccount ?? "claude.primary")]
+                        + claudeAccounts.map { NotchAgentTile(card: .limits, provider: provider, accountID: $0) }
+                }
                 if provider == .claude, let claudeAccount {
                     return [NotchAgentTile(card: .limits, provider: provider, accountID: claudeAccount)]
                 }

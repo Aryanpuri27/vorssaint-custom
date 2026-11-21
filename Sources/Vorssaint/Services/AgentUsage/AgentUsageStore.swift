@@ -473,8 +473,16 @@ struct AgentLogRoot: Equatable {
     /// Canonical, because file events report real paths: a folder kept as a
     /// link elsewhere, as dotfile setups do, would otherwise never match.
     static func all(home: URL = FileManager.default.homeDirectoryForCurrentUser,
-                    claudeProfile: ClaudeAccountProfile = ClaudeAccountProfile()) -> [AgentLogRoot] {
-        let claude = claudeProfile.logURLs(home: home).map { AgentLogRoot(provider: .claude, url: canonical($0)) }
+                    claudeProfile: ClaudeAccountProfile = ClaudeAccountProfile(),
+                    claudeExtras: [ClaudeAccountProfile] = []) -> [AgentLogRoot] {
+        // Every Claude account's logs, the chosen one first, each folder once.
+        var claude: [AgentLogRoot] = []
+        for profile in [claudeProfile] + claudeExtras {
+            for url in profile.logURLs(home: home) {
+                let root = AgentLogRoot(provider: .claude, url: canonical(url))
+                if !claude.contains(root) { claude.append(root) }
+            }
+        }
         return claude + [(AgentProvider.codex, ".codex/sessions"), (.codex, ".codex/archived_sessions"),
          (.opencode, ".local/share/opencode"), (.copilot, ".copilot/session-state")].map { provider, path in
             AgentLogRoot(provider: provider, url: canonical(home.appending(path: path, directoryHint: .isDirectory)))

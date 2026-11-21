@@ -7,6 +7,7 @@ import SwiftUI
 /// Chooses an existing login. Claude Code remains responsible for signing in.
 struct ClaudeAccountSettings: View {
     @AppStorage(DefaultsKey.notchAgentsClaudeProfile) private var selected = ""
+    @AppStorage(DefaultsKey.notchAgentsClaudeAllAccounts) private var allAccounts = true
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var usage = AgentUsageService.shared
     @State private var entries: [Entry] = []
@@ -53,6 +54,16 @@ struct ClaudeAccountSettings: View {
                 }
             }
             Button(text.chooseFolder) { chooseFolder() }
+            Toggle("Also read my other Claude Code accounts", isOn: $allAccounts)
+                .onChange(of: allAccounts) { AgentUsageService.shared.syncWithPreferences() }
+            if allAccounts {
+                let others = ClaudeProfileLimitsService.extras()
+                Text(others.isEmpty ? "No other Claude Code config folders found (~/.claude-*)."
+                     : "Also reading: " + others.map { $0.name(defaultName: text.defaultAccount) }.joined(separator: ", ")
+                        + ". Usage adds up across all of them, and each gets its own limits card.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Text(text.explanation).font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Link(text.signInHelp, destination: URL(string: "https://code.claude.com/docs/en/authentication#log-in-with-multiple-accounts")!)

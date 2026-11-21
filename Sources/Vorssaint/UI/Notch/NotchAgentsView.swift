@@ -8,6 +8,7 @@ struct NotchAgentsView: View {
     let size: CGSize
     @ObservedObject private var usage = AgentUsageService.shared
     @ObservedObject private var accounts = CodexProfileLimitsService.shared
+    @ObservedObject private var claudeAccounts = ClaudeProfileLimitsService.shared
     @ObservedObject private var l10n = L10n.shared
     @Environment(\.notchSettingsPreview) private var preview
     @AppStorage(DefaultsKey.notchAgentsPeriod) private var period = AgentPeriod.today.rawValue
@@ -34,7 +35,7 @@ struct NotchAgentsView: View {
     private var providers: [AgentProvider] {
         [claude ? AgentProvider.claude : nil, codex ? .codex : nil, opencode ? .opencode : nil, copilot ? .copilot : nil].compactMap { $0 }
             .filter { usage.snapshot.seen.contains($0) || ($0 == .codex && !codexAccounts.isEmpty)
-                || ($0 == .claude && !usage.claudeProfile.isDefault) }
+                || ($0 == .claude && (!usage.claudeProfile.isDefault || !claudeAccounts.states.isEmpty)) }
     }
 
     private var rows: [[NotchAgentTile]] {
@@ -42,7 +43,8 @@ struct NotchAgentsView: View {
         _ = (cardOrder, hiddenCards)
         return NotchAgentSupport.rows(NotchAgentSupport.tiles(cards: NotchAgentSupport.cards(), providers: providers,
                                                               codexAccounts: codexAccounts.map(\.id),
-                                                              claudeAccount: usage.claudeProfile.isDefault ? nil : usage.claudeProfile.id),
+                                                              claudeAccount: usage.claudeProfile.isDefault ? nil : usage.claudeProfile.id,
+                                                              claudeAccounts: claudeAccounts.states.map(\.id)),
                                       width: size.width)
     }
 
@@ -80,11 +82,13 @@ struct NotchAgentsView: View {
         .onAppear {
             usage.pageDidAppear(preview: preview)
             accounts.pageDidAppear(preview: preview)
+            claudeAccounts.pageDidAppear(preview: preview)
         }
         .onDisappear {
             guard !preview else { return }
             usage.pageDidDisappear()
             accounts.pageDidDisappear()
+            claudeAccounts.pageDidDisappear()
         }
     }
 
@@ -139,6 +143,14 @@ struct NotchAgentsView: View {
     }
 
     private func account(_ tile: NotchAgentTile, now: Date) -> NotchAgentAccount? {
+        if tile.provider == .claude, let id = tile.accountID, let state = claudeAccounts.states.first(where: { $0.id == id }) {
+            let strings = FeatureStrings.codexAccounts(l10n.language)
+            let base = state.profile.name(defaultName: FeatureStrings.claudeAccount(l10n.language).defaultAccount)
+            return NotchAgentAccount(name: state.email.map { base + " · " + $0 } ?? base,
+                                     limits: state.currentLimits(at: now), plan: state.plan, checking: state.checking,
+                                     failure: state.failed ? strings.failed : nil, refreshHint: strings.refreshHint,
+                                     checkLabel: strings.check) { claudeAccounts.refresh(id: id, force: true) }
+        }
         if tile.provider == .claude, tile.accountID != nil {
             let strings = FeatureStrings.codexAccounts(l10n.language)
             return NotchAgentAccount(name: claudeAccountName, limits: usage.snapshot.limits[.claude],
