@@ -65,6 +65,7 @@ struct NotchSettings: View {
     @AppStorage(DefaultsKey.screenshotDefaultAction) private var captureAction = ""
     @AppStorage(DefaultsKey.notchCapture) private var capture = true
     @AppStorage(DefaultsKey.notchTrackChange) private var trackChange = true
+    @AppStorage(DefaultsKey.notchAutoExpand) private var autoExpand = true
     @AppStorage(DefaultsKey.notchShowPlayingMusic) private var showPlayingMusic = true
     @AppStorage(DefaultsKey.notchIncludeOtherPlayers) private var includeOtherPlayers = true
     @AppStorage(DefaultsKey.notchMusicShowVolume) private var musicShowVolume = false
@@ -633,6 +634,8 @@ struct NotchSettings: View {
                     toggleCard(text.newTrack, symbol: "music.note", value: $trackChange, available: musicAvailable,
                                reason: pageReason(.music, feature: nil), reservesReason: reserves,
                                unavailableAction: pageAction(.music, feature: nil))
+                    toggleCard("Pop open for songs & notifications", symbol: "arrow.up.left.and.arrow.down.right",
+                               value: $autoExpand, available: true, reservesReason: reserves)
                     // A layout change is read straight from the system, so
                     // this card never waits on another feature.
                     toggleCard(text.inputSource, symbol: "keyboard", value: $inputSource,

@@ -262,53 +262,70 @@ struct NotchMusicView: View {
         .frame(height: NotchLayout.musicTransportHeight)
     }
 
-    /// The cover and the song, the timeline across the island, then one row
-    /// of buttons, as a phone's island lays out its player.
+    /// The next songs' covers for the cards behind, once the queue is known.
+    private var upcomingCovers: [NSImage] {
+        guard let items = service.upcoming?.items else { return [] }
+        return items.prefix(2).compactMap { service.upcomingArtwork[$0.id] }
+    }
+
+    /// Frost: a deck of covers to swipe through beside the song, its
+    /// timeline and a row of glass buttons.
     private func player(_ playback: NotchPlayback) -> some View {
-        VStack(spacing: 0) {
-            head(corner: !band.besideCamera && (showsLyrics || showsQueue || band.pageSectionsButton)) {
-                Button { RadialNowPlayingApplication.open(playback.track) } label: {
-                    NotchArtwork(image: service.artwork, size: NotchLayout.musicArtworkSize, source: playback.track)
-                        .scaleEffect(playback.isPlaying || reduceMotion ? 1 : 0.94)
-                        .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: playback.isPlaying)
+        let top: CGFloat = band.besideCamera ? bandHeight + NotchLayout.musicCameraClearance : 0
+        let room = NotchLayout.musicPlayerHeight(band: bandHeight) - top - NotchLayout.musicBottomRoom
+        let deck = max(56, min(104, room - 18))
+        let corner = !band.besideCamera && (showsLyrics || showsQueue || band.pageSectionsButton)
+        let canCommand = playback.canSendCommandsDirectly || service.automationAvailability?.access == .granted
+        return VStack(spacing: 0) {
+            Color.clear.frame(height: top)
+            HStack(spacing: 16) {
+                NotchSwipeStack(
+                    image: service.artwork, behind: upcomingCovers, source: playback.track, size: deck,
+                    playing: playback.isPlaying,
+                    canSkipNext: canCommand && !service.lacksTrackSkipping(.next),
+                    canSkipPrevious: canCommand && !service.lacksTrackSkipping(.previous),
+                    trackKey: (playback.track.title ?? "") + "|" + (playback.track.artist ?? ""),
+                    onToggle: {
+                        if service.canPerform(.toggle) { _ = service.send(.toggle, context: playback.commandContext) }
+                        else { service.requestAutomationAccess() }
+                    },
+                    onSkip: { forward in _ = service.send(forward ? .next : .previous, context: playback.commandContext) })
+                .help(text.mediaPlayPause)
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(alignment: .top, spacing: 6) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(playback.track.title ?? text.mediaNowPlaying)
+                                .font(.system(size: 15, weight: .semibold))
+                                .lineLimit(1)
+                                .help(playback.track.title ?? text.mediaNowPlaying)
+                            Text(service.commandFailed ? FeatureStrings.notchMusicExtras(l10n.language).playbackFailed
+                                 : playback.track.artist ?? playback.track.album ?? text.mediaNowPlaying)
+                                .font(.system(size: 12.5))
+                                .foregroundStyle(service.commandFailed ? AnyShapeStyle(.orange) : AnyShapeStyle(.white.opacity(0.72)))
+                                .lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: playback.track.title)
+                        // Which player the buttons drive, by its icon, when there is a choice.
+                        if service.sources.count > 1 || !service.sourceIsAutomatic { sourceMenu(playback) }
+                        if corner { extraButtons; sectionsButton }
+                        else if band.besideCamera { sectionsButton }
+                    }
+                    // The dock drops down over the rows below.
+                    .zIndex(1)
+                    Spacer(minLength: 6)
+                    NotchMusicTimeline(playback: playback, service: service, tint: .white, timesBeside: true)
+                    Spacer(minLength: 6)
+                    HStack(spacing: 6) {
+                        NotchMusicTransport(playback: playback, compact: true)
+                        Spacer(minLength: 0)
+                        if !preview && shuffle.isOffered { shuffleButton }
+                        if AppFeature.mixer.isAvailable { NotchMusicOutputButton() }
+                    }
                 }
-                .buttonStyle(NotchButtonStyle(cornerRadius: NotchLayout.musicArtworkSize * 0.19))
-                .help(text.mediaNowPlaying)
-                .accessibilityLabel(text.mediaNowPlaying)
-            } titles: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(playback.track.title ?? text.mediaNowPlaying)
-                        .font(.system(size: 14, weight: .semibold))
-                        .lineLimit(1)
-                        .help(playback.track.title ?? text.mediaNowPlaying)
-                    Text(service.commandFailed ? FeatureStrings.notchMusicExtras(l10n.language).playbackFailed
-                         : playback.track.artist ?? playback.track.album ?? text.mediaNowPlaying)
-                        .font(.system(size: 13))
-                        .foregroundStyle(service.commandFailed ? .orange : .secondary)
-                        .lineLimit(1)
-                }
-            } accessory: {
-                // Which player the buttons drive, by its icon, when there is a choice.
-                if service.sources.count > 1 || !service.sourceIsAutomatic {
-                    sourceMenu(playback)
-                }
-                // Quiet beside the song, as the timeline's times are. The
-                // bars rest flat while paused, so the title keeps its width.
-                NotchLiveEqualizerBars(isPlaying: playback.isPlaying, bars: 4, barWidth: 2.5, height: 15,
-                                       tint: .white.opacity(0.5))
-                if band.besideCamera { sectionsButton }
-            } corner: {
-                extraButtons
-                sectionsButton
+                .frame(maxHeight: .infinity)
             }
-            NotchMusicTimeline(playback: playback, service: service, tint: accent, timesBeside: true)
-                .padding(.top, NotchLayout.musicHeadSpacing)
-            transportRow {
-                if !preview && shuffle.isOffered { shuffleButton }
-            } middle: { slot in
-                NotchMusicTransport(playback: playback, slot: slot)
-            }
-            .padding(.top, NotchLayout.rowSpacing)
+            .frame(height: room)
             volumeRow
             Color.clear.frame(height: NotchLayout.musicBottomRoom)
         }
@@ -485,7 +502,7 @@ struct NotchMusicIdleTransport: View {
     private var height: CGFloat { compact ? 36 : 44 }
 
     var body: some View {
-        HStack(spacing: slot == nil ? (compact ? 12 : 18) : 0) {
+        HStack(spacing: slot == nil ? (compact ? 6 : 10) : 0) {
             button("backward.fill", title: text.mediaPrevious, size: compact ? 16 : 19).frame(width: slot)
             button("play.fill", title: text.mediaPlayPause, size: compact ? 22 : slot == nil ? 26 : 28).frame(width: slot)
             button("forward.fill", title: text.mediaNext, size: compact ? 16 : 19).frame(width: slot)
@@ -525,6 +542,8 @@ private struct NotchMusicTransport: View {
     /// What a tap on play or pause asked for, shown at once while the player
     /// takes its round trip to say so. It gives way to the player's word.
     @State private var requestedPlaying: Bool?
+    @State private var previousTaps = 0
+    @State private var nextTaps = 0
     private var text: RadialMenuFeatureStrings { FeatureStrings.radialMenu(l10n.language) }
     private var height: CGFloat { compact ? 36 : 44 }
     private var showsPlaying: Bool { requestedPlaying ?? playback.isPlaying }
@@ -554,7 +573,7 @@ private struct NotchMusicTransport: View {
     /// The player's own glyphs, white on the island with no plate behind
     /// them, as on the lock screen. Play and pause stand out by size.
     private var transportButtons: some View {
-        HStack(spacing: slot == nil ? (compact ? 12 : 18) : 0) {
+        HStack(spacing: slot == nil ? (compact ? 6 : 10) : 0) {
             if !service.lacksTrackSkipping(.previous) {
                 playbackButton("backward.fill", title: text.mediaPrevious, command: .previous).frame(width: slot)
             } else if let slot {
@@ -580,14 +599,15 @@ private struct NotchMusicTransport: View {
             } else { service.requestAutomationAccess() }
         } label: {
             Image(systemName: showsPlaying ? "pause.fill" : "play.fill")
-                .font(.system(size: compact ? 22 : slot == nil ? 26 : 28, weight: .semibold))
+                .font(.system(size: compact ? 15 : 19, weight: .semibold))
                 .foregroundStyle(.white)
                 .contentTransition(.symbolEffect(.replace))
                 .animation(reduceMotion ? nil : .smooth(duration: 0.22), value: showsPlaying)
-                .frame(width: height, height: height)
-                .contentShape(Circle())
+                .frame(width: compact ? 46 : 60, height: compact ? 32 : 38)
+                .notchGlassChip(radius: compact ? 16 : 19, fill: 0.26)
+                .contentShape(Capsule())
         }
-        .buttonStyle(NotchButtonStyle(cornerRadius: height / 2))
+        .buttonStyle(NotchSquishButtonStyle())
         // A second tap before the player answers asks for the state after it,
         // so only the player reaching what was asked ends the early word.
         .onChange(of: playback.isPlaying) { if playback.isPlaying == requestedPlaying { requestedPlaying = nil } }
@@ -608,14 +628,16 @@ private struct NotchMusicTransport: View {
     }
 
     private func playbackButton(_ symbol: String, title: String, command: NotchMusicService.Command) -> some View {
-        Button { service.send(command, context: playback.commandContext) } label: {
-            Image(systemName: symbol)
-                .font(.system(size: compact ? 16 : 19, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: height, height: height)
-                .contentShape(Circle())
+        Button {
+            if command == .next { nextTaps += 1 } else { previousTaps += 1 }
+            service.send(command, context: playback.commandContext)
+        } label: {
+            NotchFrostGlyph(symbol: symbol, size: compact ? 13 : 16, taps: command == .next ? nextTaps : previousTaps)
+                .frame(width: compact ? 34 : 44, height: compact ? 32 : 38)
+                .notchGlassChip(radius: compact ? 16 : 19, fill: 0.12)
+                .contentShape(Capsule())
         }
-        .buttonStyle(NotchButtonStyle(cornerRadius: height / 2))
+        .buttonStyle(NotchSquishButtonStyle())
         .disabled(!service.canPerform(command))
         .accessibilityLabel(title)
         .help(title)
@@ -813,3 +835,4 @@ struct NotchMusicControlsView: View {
         }
     }
 }
+

@@ -46,6 +46,10 @@ enum NotchMascotTests {
                         let parts = NotchMascotGeometry.robot(size: size)
                         figure = [parts.ears, parts.antenna, parts.bulb]
                             .reduce(parts.head.boundingBoxOfPath) { $0.union($1.boundingBoxOfPath) }
+                    } else if style == .hoo {
+                        figure = CGRect(x: 0, y: 0, width: size, height: size)
+                    } else if style == .mochi {
+                        figure = NotchMascotGeometry.mochi(size: size).body.boundingBoxOfPath
                     } else {
                         figure = NotchMascotGeometry.body(shape, size: size).boundingBoxOfPath
                     }
@@ -54,7 +58,7 @@ enum NotchMascotTests {
                 }
             }
         }
-        suite.expect(NotchMascotGeometry.figureOffset(.standard) > 0.03,
+        suite.expect(NotchMascotGeometry.figureOffset(NotchMascotLook(style: .minimal, shape: .ball, palette: .pearl)) > 0.03,
                      "a minimal ball sits low in its box, which the placement makes up for")
     }
 
@@ -109,8 +113,8 @@ enum NotchMascotTests {
         suite.expect(!NotchMascotSupport.isEnabled(in: defaults),
                      "installed, it still waits for its switch")
         suite.expect(NotchMascotSupport.look(in: defaults) == .standard
-                     && NotchMascotLook.standard == NotchMascotLook(style: .minimal, shape: .ball, palette: .pearl),
-                     "it starts as a pearl ball with two ink eyes")
+                     && NotchMascotLook.standard == NotchMascotLook(style: .hoo, shape: .ball, palette: .lilac),
+                     "it starts as Hoo, the lilac pixel owlet")
         defaults.set(true, forKey: DefaultsKey.notchMascotEnabled)
         suite.expect(NotchMascotSupport.isEnabled(in: defaults) && NotchMascotSupport.visits(in: defaults)
                      && NotchMascotSupport.reacts(in: defaults)

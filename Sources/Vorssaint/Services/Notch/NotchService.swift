@@ -206,6 +206,7 @@ final class NotchService: ObservableObject {
     private var musicDepartureWork: DispatchWorkItem?
     private var presentedMusic: NotchCompactMusicSnapshot?
     private var trackWork: DispatchWorkItem?
+    private var autoExpandWork: DispatchWorkItem?
     /// A new song with no strip song to keep in its place stays out of the
     /// closed island until its notice, as scheduleTrackNotice() explains.
     private var awaitsTrackNotice = false
@@ -854,7 +855,7 @@ final class NotchService: ObservableObject {
     /// buttons are not read for it, so a preview reads them as it draws.
     func previewGeometry(for module: NotchModule) -> NotchGeometry {
         var result = geometry.page(module, controls: NotchSupport.controls(),
-                                   sectionsButton: !NotchQuickAccessConfiguration.current().actions.contains(.explore))
+                                   sectionsButton: !NotchQuickAccessConfiguration.floating().actions.contains(.explore))
         if result.pageTop == .wrapsCamera { result.pageTrailingControls = playerToggleCount }
         return result
     }
@@ -976,6 +977,9 @@ final class NotchService: ObservableObject {
         if dragPlaceholder { return CGSize(width: geometry.peek.width, height: geometry.safeContentTop + 66) }
         if let notice {
             guard noticeExpanded else { return geometry.noticeSize(wings: notice.wings(in: geometry)) }
+            if notice.event == .track, notice.notification == nil {
+                return geometry.notificationPreviewSize(contentHeight: NotchSongPopLayout.contentHeight)
+            }
             return geometry.notificationPreviewSize(
                 contentHeight: notice.previewContentHeight(width: geometry.notificationPreviewContentWidth))
         }
@@ -1161,6 +1165,7 @@ final class NotchService: ObservableObject {
         guard NotchSupport.isEnabled() else { stop(); return }
         if !running {
             running = true
+            NotchStageController.shared.start()
             installObservers()
         }
         syncShortcut()
@@ -2369,8 +2374,30 @@ final class NotchService: ObservableObject {
             holdNotification(id)
         } else {
             scheduleNoticeDismissal(after: incoming.event.duration)
+            if transition != .none, !keepsPreview { scheduleAutoExpand(for: incoming) }
         }
         return true
+    }
+
+    /// A new song or a notification pops the island open by itself for a
+    /// moment, a beat after its strip lands, then folds away again. A pointer
+    /// over an opened notification holds it, as a hover opening does.
+    private func scheduleAutoExpand(for incoming: NotchNotice) {
+        autoExpandWork?.cancel(); autoExpandWork = nil
+        guard UserDefaults.standard.object(forKey: DefaultsKey.notchAutoExpand) as? Bool ?? true,
+              incoming.notification != nil || incoming.event == .track else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.autoExpandWork = nil
+            guard self.running, !self.suspended, !self.expanded, !self.peeking, !self.pinned, !self.heldDrag,
+                  !self.dragPlaceholder, self.captureControls == nil, !self.noticeExpanded, self.noticeCanPresent,
+                  !self.hiddenUntilHover, let shown = self.notice, shown.clickTarget == incoming.clickTarget else { return }
+            if incoming.event == .track, NotchMusicService.shared.playback?.isPlaying != true { return }
+            self.mutatePresentation(transitionContent: .reveal) { self.noticeExpanded = true }
+            self.scheduleNoticeDismissal(after: incoming.event == .track ? 4.5 : 6)
+        }
+        autoExpandWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
     }
 
     /// The strip keeps its outgoing button until another notice or page takes its place.
@@ -2717,7 +2744,7 @@ final class NotchService: ObservableObject {
             removeScreenEdgeClickMonitors()
             return
         }
-        let access = NotchQuickAccessConfiguration.current()
+        let access = NotchQuickAccessConfiguration.floating()
         let size = surfaceSize
         let contentTransition = compactMusicTransition(transitionContent, animated: animated)
         if captureControls == nil {
@@ -3638,7 +3665,7 @@ final class NotchService: ObservableObject {
         var next = baseGeometry(for: screen)
         let sameMenuBar = next.hasSameMenuBar(as: geometry)
         if sameMenuBar { next.compactSideRoom = geometry.compactSideRoom }
-        let access = NotchQuickAccessConfiguration.current()
+        let access = NotchQuickAccessConfiguration.floating()
         next.quickAccessBottomInset = access.hasBottom ? NotchQuickAccessLayout.gutter : 0
         // Read with the floating buttons rather than on every layout pass,
         // which would decode them each time.
@@ -5121,6 +5148,12 @@ extension NotchService {
         let working = hasAgentActivity
         let saw = mascotSawAgents
         mascotSawAgents = working
+        // The agent finished: a cheer once the island rests again.
+        if saw == true, !working, NotchMascotSupport.reacts() {
+            reactMascot(.celebrate, patience: 20)
+            NotchStageController.shared.celebrate()
+            return
+        }
         guard saw == false, working, mascotRestedInView, NotchMascotSupport.reacts() else { return }
         let now = CACurrentMediaTime()
         guard now - lastMascotAgentStart > NotchMascotSupport.agentStartInterval else { return }

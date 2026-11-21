@@ -54,6 +54,17 @@ final class NotchMascotRig: NSObject {
     private let face = CALayer()
     private let leftEye = CAShapeLayer()
     private let rightEye = CAShapeLayer()
+    /// Mochi's pink inner ears, rosy cheeks and little mouth.
+    private let innerEars = CAShapeLayer()
+    private let blush = CAShapeLayer()
+    private let mouth = CAShapeLayer()
+    /// Hoo: the pixel sprite, redrawn a frame at a time while it is in sight.
+    private let pixel = CALayer()
+    private var pixelTimer: Timer?
+    private var pixelFrame = 0
+    private var pixelVisible = false
+    private var pixelAccessory: NotchMascotAccessory = .none
+    private var pixelOverride: (mood: NotchMascotMood, until: Int)?
     private var blinks = 0
     /// It grew sleepy on its own after a long rest, rather than being shown
     /// so, and anything that happens wakes it.
@@ -72,19 +83,30 @@ final class NotchMascotRig: NSObject {
         root.addSublayer(hopper)
         hopper.addSublayer(squasher)
         squasher.addSublayer(tilter)
-        for layer in [ears, antenna, bulb, fill, visor, shine] { tilter.addSublayer(layer) }
+        for layer in [ears, antenna, bulb, fill, visor, shine, innerEars, blush, mouth, pixel] { tilter.addSublayer(layer) }
+        pixel.magnificationFilter = .nearest
+        pixel.contentsGravity = .resize
+        pixel.isHidden = true
         tilter.addSublayer(attention)
         attention.addSublayer(face)
         face.addSublayer(leftEye)
         face.addSublayer(rightEye)
         fill.mask = fillMask
         for layer in [root, hopper, squasher, tilter, attention, face, ears, antenna, bulb, fill, fillMask, visor, shine,
-                      leftEye, rightEye] {
+                      leftEye, rightEye, innerEars, blush, mouth, pixel] {
             layer.actions = Self.noActions
         }
+        innerEars.fillColor = CGColor(srgbRed: 1, green: 0.62, blue: 0.72, alpha: 0.85)
+        blush.fillColor = CGColor(srgbRed: 1, green: 0.48, blue: 0.62, alpha: 0.5)
+        mouth.fillColor = nil
+        mouth.strokeColor = NotchMascotColor.ink.cgColor
+        mouth.lineCap = .round
+        mouth.lineJoin = .round
         shine.fillColor = NotchMascotColor.shine.cgColor
         visor.fillColor = NotchMascotColor.visor.cgColor
     }
+
+    deinit { pixelTimer?.invalidate() }
 
     private static let noActions: [String: CAAction] = [
         "position": NSNull(), "bounds": NSNull(), "transform": NSNull(), "path": NSNull(),
@@ -115,7 +137,8 @@ final class NotchMascotRig: NSObject {
         }
         let box = CGRect(x: 0, y: 0, width: size, height: size)
         root.bounds = box
-        for layer in [hopper, squasher, tilter, attention, face, ears, antenna, bulb, fill, fillMask, visor, shine] {
+        for layer in [hopper, squasher, tilter, attention, face, ears, antenna, bulb, fill, fillMask, visor, shine,
+                      innerEars, blush, mouth, pixel] {
             layer.frame = box
             layer.contentsScale = scale
         }
@@ -145,6 +168,16 @@ final class NotchMascotRig: NSObject {
                 eye.shadowRadius = max(0.6, size * 0.04)
                 eye.shadowOffset = .zero
             }
+        } else if look.style == .mochi {
+            let parts = NotchMascotGeometry.mochi(size: size)
+            fillMask.path = parts.body
+            innerEars.path = parts.innerEars
+            blush.path = parts.blush
+            mouth.lineWidth = max(0.6, size * 0.032)
+            for eye in [leftEye, rightEye] {
+                eye.fillColor = NotchMascotColor.ink.cgColor
+                eye.shadowOpacity = 0
+            }
         } else {
             fillMask.path = NotchMascotGeometry.body(look.shape, size: size)
             for eye in [leftEye, rightEye] {
@@ -153,6 +186,16 @@ final class NotchMascotRig: NSObject {
             }
         }
         for layer in [ears, antenna, bulb, visor] { layer.isHidden = !robot }
+        for layer in [innerEars, blush, mouth] { layer.isHidden = look.style != .mochi }
+        let hoo = look.style == .hoo
+        fill.isHidden = hoo
+        face.isHidden = hoo
+        if hoo { shine.isHidden = true }
+        pixel.isHidden = !hoo
+        shapeMouth(animated: false)
+        pixelAccessory = Self.currentAccessory()
+        drawPixel()
+        syncPixelTimer()
         shine.path = NotchMascotGeometry.shine(look.face, size: size)
         shine.isHidden = robot
         let face = look.face
@@ -173,6 +216,8 @@ final class NotchMascotRig: NSObject {
         dozed = false
         if mood != .sleepy { blinks = 0 }
         apply(mood.expression, animated: animated && !reduceMotion)
+        shapeMouth(animated: animated && !reduceMotion)
+        drawPixel()
         lightBulb(mood != .sleepy, animated: animated && !reduceMotion)
         guard animated, !reduceMotion, size > 0 else { syncBlinking(); return }
         switch mood {
@@ -183,6 +228,104 @@ final class NotchMascotRig: NSObject {
         default: break
         }
         syncBlinking()
+    }
+
+    /// Mochi's mouth follows its mood: an "o" when startled, a line when
+    /// drowsy, its little "ω" otherwise. The cheeks glow brighter in love.
+    private func shapeMouth(animated: Bool) {
+        guard look.style == .mochi, size > 0 else { return }
+        let parts = NotchMascotGeometry.mochi(size: size)
+        let path: CGPath
+        switch mood {
+        case .surprised, .alert: path = parts.mouthOpen
+        case .sleepy: path = parts.mouthSleepy
+        default: path = parts.mouth
+        }
+        let filled = mood == .surprised || mood == .alert
+        let cheeks: Float = mood == .love || mood == .happy ? 0.95 : 0.6
+        if animated {
+            let fade = CATransition()
+            fade.type = .fade
+            fade.duration = 0.18
+            mouth.add(fade, forKey: "shape")
+            let glow = CABasicAnimation(keyPath: "opacity")
+            glow.fromValue = blush.presentation()?.opacity ?? blush.opacity
+            glow.toValue = cheeks
+            glow.duration = 0.3
+            blush.add(glow, forKey: "glow")
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        mouth.path = path
+        mouth.fillColor = filled ? NotchMascotColor.ink.cgColor : nil
+        blush.opacity = cheeks
+        CATransaction.commit()
+    }
+
+    // MARK: Pixel sprite
+
+    private static func currentAccessory() -> NotchMascotAccessory {
+        let chosen = NotchMascotAccessory.current()
+        guard chosen == .auto else { return chosen }
+        return NotchMascotAccessory.automatic(musicPlaying: NotchMusicService.shared.playback?.isPlaying == true)
+    }
+
+    /// A reaction shows on the sprite's face for a second or two.
+    private func notePixelReaction(_ reaction: NotchMascotReaction) {
+        guard look.style == .hoo else { return }
+        let face: NotchMascotMood
+        switch reaction {
+        case .celebrate, .bounce, .groove: face = .happy
+        case .love: face = .love
+        case .surprised, .flash, .perk, .wakeUp: face = .surprised
+        case .confused: face = .confused
+        case .yawn, .hush: face = .sleepy
+        case .ready: face = .determined
+        }
+        pixelOverride = (face, pixelFrame + 14)
+        drawPixel()
+    }
+
+    private func syncPixelTimer() {
+        let wanted = look.style == .hoo && pixelVisible && !reduceMotion && size > 0
+        guard wanted != (pixelTimer != nil) else { return }
+        if wanted {
+            let timer = Timer(timeInterval: 1 / NotchPixelHoo.fps, repeats: true) { [weak self] _ in self?.tickPixel() }
+            timer.tolerance = 0.02
+            RunLoop.main.add(timer, forMode: .common)
+            pixelTimer = timer
+        } else {
+            pixelTimer?.invalidate()
+            pixelTimer = nil
+        }
+    }
+
+    private func tickPixel() {
+        pixelFrame += 1
+        // What it wears can follow the music or the clock; look now and then.
+        if pixelFrame % 16 == 0 { pixelAccessory = Self.currentAccessory() }
+        drawPixel()
+    }
+
+    private func drawPixel() {
+        guard look.style == .hoo, size > 0 else { return }
+        var state = NotchPixelHoo.State()
+        if let override = pixelOverride, pixelFrame < override.until { state.mood = override.mood } else {
+            pixelOverride = nil
+            state.mood = mood
+        }
+        state.frame = pixelFrame
+        state.palette = look.palette
+        state.accessory = pixelAccessory
+        state.walking = isVisiting
+        // The eyes go where the pointer or a typed word pulls the face.
+        let pull = attention.presentation()?.transform ?? attention.transform
+        let reach = max(1, size * 0.05)
+        state.gaze = CGPoint(x: max(-1, min(1, pull.m41 / reach)), y: max(-1, min(1, pull.m42 / reach)))
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        pixel.contents = NotchPixelHoo.image(state)
+        CATransaction.commit()
     }
 
     private func eyePath(_ eye: NotchMascotEye, right: Bool) -> CGPath {
@@ -274,6 +417,7 @@ final class NotchMascotRig: NSObject {
         blinks = 0
         dozed = false
         apply(mood.expression, animated: false)
+        shapeMouth(animated: false)
     }
 
     // MARK: Attention
@@ -496,6 +640,7 @@ final class NotchMascotRig: NSObject {
     /// Reduce Motion it only changes face.
     func react(_ reaction: NotchMascotReaction, lift: CGFloat) {
         guard size > 0 else { return }
+        notePixelReaction(reaction)
         // Whatever it is, it wakes up for it.
         if dozed, reaction != .wakeUp { setMood(.idle, animated: !reduceMotion) }
         blinks = 0
@@ -733,6 +878,7 @@ final class NotchMascotRig: NSObject {
 
     /// Blinks wait while the layer is out of sight, and `visible` resumes them.
     func setIdles(_ idles: Bool, visible: Bool) {
+        if pixelVisible != visible { pixelVisible = visible; syncPixelTimer() }
         let wanted = idles && visible
         guard wanted != self.idles else { return }
         self.idles = wanted
@@ -749,7 +895,7 @@ final class NotchMascotRig: NSObject {
     }
 
     private func syncBlinking() {
-        guard idles, mood.expression.blinks, size > 0 else { stopBlinking(); return }
+        guard idles, mood.expression.blinks, size > 0, look.style != .hoo else { stopBlinking(); return }
         guard leftEye.animation(forKey: "blink") == nil else { return }
         scheduleBlink()
     }

@@ -64,7 +64,7 @@ private struct NotchDownloadsSetupView: View {
             .font(.system(size: 26, weight: .light))
             .foregroundStyle(.white.opacity(0.65))
             .frame(width: 56, height: 56)
-            .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .notchGlassChip(radius: 18, fill: 0.05)
             .accessibilityHidden(true)
     }
 
@@ -101,7 +101,7 @@ private struct NotchDownloadsSetupView: View {
                     .font(.system(size: 12, weight: .semibold))
                     .padding(.horizontal, 14)
                     .frame(height: 28)
-                    .background(.white.opacity(0.14), in: Capsule())
+                    .modifier(NotchGlassChip(shape: Capsule(), fill: 0.14))
                     .contentShape(Capsule())
             }
             .buttonStyle(NotchButtonStyle(cornerRadius: 14))
@@ -225,7 +225,7 @@ struct NotchDownloadsView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .notchGlassChip(radius: 14, fill: 0.07)
         .clipped()
         .accessibilityElement(children: .contain)
     }

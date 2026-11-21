@@ -130,7 +130,7 @@ struct NotchFilesView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.white.opacity(selected ? 0.14 : 0.04), in: RoundedRectangle(cornerRadius: 20))
+        .notchGlassChip(radius: 20, fill: selected ? 0.14 : 0.04)
         .overlay {
             RoundedRectangle(cornerRadius: 20)
                 .strokeBorder(.white.opacity(selected ? 0.7 : 0.2), lineWidth: selected ? 1.5 : 0.75)

@@ -135,6 +135,13 @@ struct NotchView: View {
                     .padding(.bottom, NotchLayout.bottomInset)
                     .frame(width: service.surfaceSize.width, height: service.surfaceSize.height, alignment: .top)
                     .id(notice.clickTarget)
+            } else if service.noticeExpanded, notice.event == .track, let playback = music.playback {
+                NotchSongPopView(playback: playback, service: service) { service.activateNotice(notice) }
+                    .padding(.horizontal, NotchLayout.horizontalInset)
+                    .padding(.top, service.geometry.safeContentTop)
+                    .padding(.bottom, NotchLayout.bottomInset)
+                    .frame(width: service.surfaceSize.width, height: service.surfaceSize.height, alignment: .top)
+                    .id(notice.clickTarget)
             } else {
                 Button {
                     service.activateNotice(notice)

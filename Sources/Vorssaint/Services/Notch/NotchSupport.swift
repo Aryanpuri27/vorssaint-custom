@@ -1491,6 +1491,23 @@ struct NotchQuickAccessConfiguration: Equatable, Codable {
         return configuration
     }
 
+    /// Whether the quick buttons sit in the island's own dock instead of
+    /// floating around it.
+    static func isDocked(in defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: DefaultsKey.notchQuickAccessDocked) as? Bool ?? true
+    }
+
+    /// The buttons drawn floating around the open island: none while docked.
+    static func floating(in defaults: UserDefaults = .standard) -> Self {
+        isDocked(in: defaults) ? Self(buttons: []) : current(in: defaults)
+    }
+
+    /// The shortcuts the dock offers, besides the sections themselves.
+    static func docked(in defaults: UserDefaults = .standard) -> [NotchQuickAction] {
+        guard isDocked(in: defaults) else { return [] }
+        return current(in: defaults).actions.filter { $0 != .explore }
+    }
+
     /// The buttons the island shows. One whose section or feature is off
     /// keeps its place, so it comes back there once that is on again.
     func shown(in defaults: UserDefaults = .standard) -> [NotchQuickButton] {
@@ -3242,4 +3259,9 @@ enum NotchTranslucentTint {
                                           openness: openness, increasedContrast: increasedContrast))
         }
     }
+}
+
+/// The card a new song pops the island open to.
+enum NotchSongPopLayout {
+    static let contentHeight: CGFloat = 76
 }

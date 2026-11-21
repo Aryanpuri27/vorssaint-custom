@@ -287,7 +287,7 @@ struct NotchScratchpadView: View {
         .padding(.leading, 10)
         .padding(.trailing, showsClose ? 5 : selected ? 8 : 10)
         .frame(height: 22)
-        .background(.white.opacity(selected ? 0.14 : 0.05), in: Capsule())
+        .modifier(NotchGlassChip(shape: Capsule(), fill: selected ? 0.14 : 0.05))
         .contentShape(Capsule())
     }
 

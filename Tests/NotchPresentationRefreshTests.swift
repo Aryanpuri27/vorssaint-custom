@@ -77,6 +77,7 @@ enum NotchPresentationRefreshContract {
     struct NotchQuickAccessConfiguration {
         let buttons: [Int] = []
         static func current() -> Self { Self() }
+        static func floating() -> Self { Self() }
     }
     enum FeatureStrings {
         static func notch(_ language: Int) -> (collapse: String, open: String) { ("Close", "Open") }

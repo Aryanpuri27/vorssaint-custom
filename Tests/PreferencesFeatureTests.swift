@@ -46,8 +46,8 @@ enum PreferencesFeatureTests {
                "the app follows the system appearance until the user picks a side")
         suite.expect(registeredDefaults[DefaultsKey.liquidGlassEnabled] as? Bool == false,
                "liquid glass in other windows is opt-in")
-        suite.expect(registeredDefaults[DefaultsKey.notchLiquidGlassEnabled] as? Bool == false,
-               "liquid glass in Dynamic Island is opt-in")
+        suite.expect(registeredDefaults[DefaultsKey.notchLiquidGlassEnabled] as? Bool == true,
+               "the Dynamic Island starts in its Bloom glass")
         suite.expect(SettingsBackupSupport.exportKeys().contains(DefaultsKey.liquidGlassEnabled),
                "liquid glass in other windows follows settings backups")
         suite.expect(SettingsBackupSupport.exportKeys().contains(DefaultsKey.notchLiquidGlassEnabled),

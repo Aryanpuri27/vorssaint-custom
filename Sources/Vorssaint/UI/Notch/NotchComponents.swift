@@ -26,8 +26,8 @@ struct NotchButtonStyle: ButtonStyle {
             }
             .opacity(enabled ? (configuration.isPressed ? 0.8 : 1) : 0.4)
             .scaleEffect(reduceMotion || !lifts ? 1
-                         : configuration.isPressed ? 0.965 : (active ? 1.022 : 1))
-            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.7),
+                         : configuration.isPressed ? 0.93 : (active ? 1.03 : 1))
+            .animation(reduceMotion ? nil : .spring(response: 0.26, dampingFraction: 0.58),
                        value: configuration.isPressed)
             .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.75), value: hovered)
             .onHover { hovered = $0 }
@@ -152,15 +152,14 @@ struct NotchIconButton: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(selected ? .white : .white.opacity(0.55))
+                .foregroundStyle(selected ? .white : .white.opacity(0.72))
                 .contentTransition(.symbolEffect(.replace))
                 .animation(reduceMotion ? nil : .smooth(duration: 0.24), value: symbol)
                 .frame(width: 28, height: 28)
-                .background(.white.opacity(selected ? 0.12 : 0),
-                            in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .modifier(NotchGlassChip(shape: Circle(), fill: selected ? 0.22 : 0.08))
+                .contentShape(Circle())
         }
-        .buttonStyle(NotchButtonStyle(cornerRadius: 9))
+        .buttonStyle(NotchButtonStyle(cornerRadius: 14))
         .help(title)
         .accessibilityLabel(title)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -172,9 +171,59 @@ struct NotchIconButton: View {
 struct NotchSectionsButton: View {
     let action: () -> Void
     @ObservedObject private var l10n = L10n.shared
+    @State private var open = false
+    @State private var closeWork: DispatchWorkItem?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.notchSettingsPreview) private var preview
+
+    /// The dock: the quick buttons that used to float around the island,
+    /// folded under the sections button. Hovering drops them down.
+    private var items: [NotchQuickAction] { preview ? [] : NotchQuickAccessConfiguration.docked() }
 
     var body: some View {
-        NotchIconButton(symbol: "square.grid.2x2", title: FeatureStrings.notch(l10n.language).sectionsTitle, action: action)
+        let items = self.items
+        let companion = !preview && NotchMascotSupport.isEnabled()
+        NotchIconButton(symbol: "square.grid.2x2", title: FeatureStrings.notch(l10n.language).sectionsTitle,
+                        selected: open, action: action)
+            .overlay(alignment: .top) {
+                if open, !items.isEmpty || companion {
+                    VStack(spacing: 4) {
+                        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                            NotchIconButton(symbol: item.symbol, title: item.title(l10n)) {
+                                open = false
+                                NotchService.shared.activateQuickAction(item)
+                            }
+                        }
+                        if companion {
+                            NotchIconButton(symbol: "gamecontroller.fill", title: "Play with your companion") {
+                                open = false
+                                NotchStageController.shared.startGame()
+                            }
+                        }
+                    }
+                    .padding(4)
+                    .background(Capsule().fill(Color.black.opacity(0.78)))
+                    .modifier(NotchGlassChip(shape: Capsule(), fill: 0.06))
+                    .offset(y: 32)
+                    .transition(.scale(scale: 0.5, anchor: .top).combined(with: .opacity))
+                    .onHover(perform: hovering)
+                }
+            }
+            .onHover(perform: hovering)
+            .zIndex(open ? 50 : 0)
+    }
+
+    private func hovering(_ inside: Bool) {
+        closeWork?.cancel()
+        if inside {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.72)) { open = true }
+        } else {
+            let work = DispatchWorkItem {
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.16)) { open = false }
+            }
+            closeWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+        }
     }
 }
 
@@ -242,7 +291,7 @@ struct NotchPillButton: View {
                 .lineLimit(1)
                 .padding(.horizontal, 14)
                 .frame(height: 28)
-                .background(.white.opacity(prominent ? 0.14 : 0), in: Capsule())
+                .modifier(NotchGlassChip(shape: Capsule(), fill: prominent ? 0.24 : 0.08))
                 .contentShape(Capsule())
         }
         .buttonStyle(NotchButtonStyle(cornerRadius: 14))
@@ -566,16 +615,19 @@ struct NotchSurfaceBackground: View {
             if #available(macOS 26, *), showsGlass, presentation.restingBlack < 1 {
                 let shape = NotchBackdropShape(contour: presentation.contour)
                 Color.clear
-                    .glassEffect(.clear, in: shape)
+                    .glassEffect(.regular.tint(.black.opacity(0.18)), in: shape)
                     .environment(\.appearsActive, true)
                     .materialActiveAppearance(.active)
                     .overlay {
-                        LinearGradient(stops: Self.shade(openness: presentation.openness, contrast: contrast),
+                        LinearGradient(stops: Self.premiumShade(openness: presentation.openness, contrast: contrast,
+                                                                stripHeight: presentation.stripHeight,
+                                                                height: presentation.contourBottom),
                                        startPoint: .top, endPoint: .bottom)
                             .frame(height: presentation.contourBottom)
                             .frame(maxHeight: .infinity, alignment: .top)
                             .mask(shape)
                     }
+                    .overlay { NotchGlassRim(shape: shape, openness: presentation.openness) }
             }
 #endif
             if showsTranslucent, presentation.restingBlack < 1 {
@@ -597,6 +649,46 @@ struct NotchSurfaceBackground: View {
                 color: .black.opacity(1 - openness * (contrast == .increased ? 0.10 : 0.45) * pow(t, 2.5)),
                 location: t)
         }
+    }
+}
+
+extension NotchSurfaceBackground {
+    /// Black over the camera strip so the housing still reads as one piece,
+    /// then a quick ease into a light smoked tint so the frosted glass shows.
+    static func premiumShade(openness: Double, contrast: ColorSchemeContrast,
+                             stripHeight: CGFloat, height: CGFloat) -> [Gradient.Stop] {
+        let strip = height > 0 ? min(0.6, Double(stripHeight / height)) : 0
+        let floor = contrast == .increased ? 0.7 : 0.16
+        let reach = 1 - openness * (1 - floor)
+        return (0...48).map { index in
+            let t = Double(index) / 48
+            let past = max(0, t - strip) / max(0.0001, min(0.28, 1 - strip))
+            let eased = min(1, past)
+            let smooth = eased * eased * (3 - 2 * eased)
+            return Gradient.Stop(color: .black.opacity(1 - (1 - reach) * smooth), location: t)
+        }
+    }
+}
+
+/// A thin light catch along the glass edge, brightest along the bottom lip
+/// where light would gather, as Apple's own glass panels show it.
+struct NotchGlassRim: View {
+    let shape: NotchBackdropShape
+    let openness: Double
+
+    var body: some View {
+        shape
+            .stroke(
+                LinearGradient(stops: [
+                    .init(color: .white.opacity(0.0), location: 0),
+                    .init(color: .white.opacity(0.10), location: 0.55),
+                    .init(color: .white.opacity(0.32), location: 1)
+                ], startPoint: .top, endPoint: .bottom),
+                lineWidth: 1
+            )
+            .blendMode(.plusLighter)
+            .opacity(openness)
+            .allowsHitTesting(false)
     }
 }
 
@@ -688,38 +780,18 @@ struct NotchControlSurface: ViewModifier {
     let cornerRadius: CGFloat
     var selected = false
     var interactive = true
-    @AppStorage(DefaultsKey.notchLiquidGlassEnabled) private var glass = false
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.notchGlassSurface) private var glassSurface
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        Group {
-            if glassSurface {
-                content
-                    .background(.white.opacity(selected ? 0.11 : 0.045), in: shape)
-                    .overlay {
-                        shape.strokeBorder(.white.opacity(selected ? 0.16 : 0.065), lineWidth: 0.5)
-                            .allowsHitTesting(false)
-                    }
-            } else {
-#if compiler(>=6.2)
-                if #available(macOS 26, *), glass, !reduceTransparency {
-                    content.background(.white.opacity(selected ? 0.12 : 0.065), in: shape)
-                        .glassEffect(.regular.interactive(interactive), in: shape)
-                } else {
-                    content.background(.white.opacity(selected ? 0.12 : 0.065), in: shape)
-                }
-#else
-                content.background(.white.opacity(selected ? 0.12 : 0.065), in: shape)
-#endif
+        content
+            .background(shape.fill(.white.opacity(selected ? 0.17 : (glassSurface ? 0.09 : 0.075))))
+            .overlay { NotchGlassHighlight(shape: shape, strength: selected ? 1 : 0.7) }
+            .overlay {
+                shape.strokeBorder(.white.opacity(contrast == .increased ? 0.5 : 0), lineWidth: 0.75)
+                    .allowsHitTesting(false)
             }
-        }
-        .overlay {
-            shape.strokeBorder(.white.opacity(contrast == .increased ? 0.5 : 0), lineWidth: 0.75)
-                .allowsHitTesting(false)
-        }
     }
 }
 

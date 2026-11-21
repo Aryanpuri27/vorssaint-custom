@@ -13,6 +13,10 @@ import Foundation
 
 enum NotchMascotStyle: String, CaseIterable, Identifiable {
     case minimal, robot
+    /// A kitten-bun: cat ears, rosy cheeks and a little "ω" mouth.
+    case mochi
+    /// Hoo, a pixel owlet drawn a frame at a time.
+    case hoo
 
     var id: String { rawValue }
 }
@@ -78,7 +82,7 @@ struct NotchMascotLook: Equatable {
     var shape: NotchMascotShape
     var palette: NotchMascotPalette
 
-    static let standard = NotchMascotLook(style: .minimal, shape: .ball, palette: .pearl)
+    static let standard = NotchMascotLook(style: .hoo, shape: .ball, palette: .lilac)
 }
 
 enum NotchMascotMood: String, CaseIterable, Identifiable {
@@ -316,6 +320,12 @@ struct NotchMascotFaceLayout: Equatable {
 
 extension NotchMascotLook {
     var face: NotchMascotFaceLayout {
+        if style == .mochi {
+            return NotchMascotFaceLayout(leftEye: CGPoint(x: 0.355, y: 0.615), rightEye: CGPoint(x: 0.645, y: 0.615),
+                                         eyeSize: CGSize(width: 0.088, height: 0.155),
+                                         shineCenter: CGPoint(x: 0.27, y: 0.47), shineRadii: CGSize(width: 0.075, height: 0.04),
+                                         shineAngle: -0.45)
+        }
         if style == .robot {
             return NotchMascotFaceLayout(leftEye: CGPoint(x: 0.36, y: 0.63), rightEye: CGPoint(x: 0.64, y: 0.63),
                                          eyeSize: CGSize(width: 0.085, height: 0.16),
@@ -400,7 +410,12 @@ enum NotchMascotGeometry {
     /// wherever it is meant to be centred.
     static func figureOffset(_ look: NotchMascotLook) -> CGFloat {
         let bounds: CGRect
-        if look.style == .robot {
+        if look.style == .hoo {
+            // The sprite fills its box; its feet stand on the box's floor.
+            bounds = CGRect(x: 0, y: 0, width: 1, height: 1)
+        } else if look.style == .mochi {
+            bounds = mochi(size: 1).body.boundingBoxOfPath
+        } else if look.style == .robot {
             let parts = robot(size: 1)
             bounds = [parts.ears, parts.antenna, parts.bulb]
                 .reduce(parts.head.boundingBoxOfPath) { $0.union($1.boundingBoxOfPath) }
@@ -408,6 +423,67 @@ enum NotchMascotGeometry {
             bounds = body(look.shape, size: 1).boundingBoxOfPath
         }
         return bounds.midY - 0.5
+    }
+
+    /// The kitten-bun's body with its ears, the pink inside them, its cheeks
+    /// and its mouths.
+    struct Mochi {
+        let body: CGPath
+        let innerEars: CGPath
+        let blush: CGPath
+        let mouth: CGPath
+        let mouthOpen: CGPath
+        let mouthSleepy: CGPath
+    }
+
+    static func mochi(size: CGFloat) -> Mochi {
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * size, y: y * size) }
+        // A soft bun, wider than tall, its bottom a little flatter than its top.
+        let bun = CGMutablePath()
+        let count = 72
+        for index in 0..<count {
+            let angle = CGFloat(index) / CGFloat(count) * 2 * .pi
+            let cosine = cos(angle), sine = sin(angle)
+            let x = 0.5 + 0.44 * (cosine < 0 ? -1 : 1) * pow(abs(cosine), 2 / 2.5)
+            let y = 0.645 + (sine < 0 ? 0.31 : 0.30) * (sine < 0 ? -1 : 1) * pow(abs(sine), sine < 0 ? 2 / 2.2 : 2 / 2.9)
+            if index == 0 { bun.move(to: point(x, y)) } else { bun.addLine(to: point(x, y)) }
+        }
+        bun.closeSubpath()
+        /// A triangle with rounded tips: the base corners and the point.
+        func ear(_ a: CGPoint, _ tip: CGPoint, _ b: CGPoint, round: CGFloat) -> CGPath {
+            let path = CGMutablePath()
+            func lerp(_ p: CGPoint, _ q: CGPoint, _ t: CGFloat) -> CGPoint {
+                CGPoint(x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t)
+            }
+            path.move(to: lerp(a, tip, round))
+            path.addLine(to: lerp(tip, a, round))
+            path.addQuadCurve(to: lerp(tip, b, round), control: tip)
+            path.addLine(to: lerp(b, tip, round))
+            path.addQuadCurve(to: lerp(a, tip, round), control: lerp(lerp(a, b, 0.5), tip, -0.15))
+            path.closeSubpath()
+            return path
+        }
+        let ears = CGMutablePath()
+        ears.addPath(ear(point(0.11, 0.52), point(0.20, 0.17), point(0.45, 0.39), round: 0.22))
+        ears.addPath(ear(point(0.89, 0.52), point(0.80, 0.17), point(0.55, 0.39), round: 0.22))
+        let body = bun.union(ears)
+        let inner = CGMutablePath()
+        inner.addPath(ear(point(0.18, 0.44), point(0.225, 0.25), point(0.37, 0.38), round: 0.28))
+        inner.addPath(ear(point(0.82, 0.44), point(0.775, 0.25), point(0.63, 0.38), round: 0.28))
+        let blush = CGMutablePath()
+        blush.addEllipse(in: CGRect(x: 0.165 * size, y: 0.69 * size, width: 0.15 * size, height: 0.085 * size))
+        blush.addEllipse(in: CGRect(x: 0.685 * size, y: 0.69 * size, width: 0.15 * size, height: 0.085 * size))
+        // "ω": two small cups side by side.
+        let mouth = CGMutablePath()
+        mouth.move(to: point(0.435, 0.700))
+        mouth.addQuadCurve(to: point(0.5, 0.705), control: point(0.462, 0.765))
+        mouth.addQuadCurve(to: point(0.565, 0.700), control: point(0.538, 0.765))
+        let open = CGMutablePath()
+        open.addEllipse(in: CGRect(x: 0.465 * size, y: 0.695 * size, width: 0.07 * size, height: 0.08 * size))
+        let sleepy = CGMutablePath()
+        sleepy.move(to: point(0.47, 0.725))
+        sleepy.addLine(to: point(0.53, 0.725))
+        return Mochi(body: body, innerEars: inner, blush: blush, mouth: mouth, mouthOpen: open, mouthSleepy: sleepy)
     }
 
     static func robot(size: CGFloat) -> Robot {
@@ -1261,9 +1337,10 @@ enum NotchMascotSupport {
 
     static func look(in defaults: UserDefaults = .standard) -> NotchMascotLook {
         NotchMascotLook(
-            style: NotchMascotStyle(rawValue: defaults.string(forKey: DefaultsKey.notchMascotStyle) ?? "") ?? .minimal,
-            shape: NotchMascotShape(rawValue: defaults.string(forKey: DefaultsKey.notchMascotShape) ?? "") ?? .ball,
-            palette: NotchMascotPalette(rawValue: defaults.string(forKey: DefaultsKey.notchMascotPalette) ?? "") ?? .pearl)
+            style: NotchMascotStyle(rawValue: defaults.string(forKey: DefaultsKey.notchMascotStyle) ?? "") ?? NotchMascotLook.standard.style,
+            shape: NotchMascotShape(rawValue: defaults.string(forKey: DefaultsKey.notchMascotShape) ?? "") ?? NotchMascotLook.standard.shape,
+            palette: NotchMascotPalette(rawValue: defaults.string(forKey: DefaultsKey.notchMascotPalette) ?? "")
+                ?? NotchMascotLook.standard.palette)
     }
 
     /// How the Command Bar comes out of the island, or nil when it opens in

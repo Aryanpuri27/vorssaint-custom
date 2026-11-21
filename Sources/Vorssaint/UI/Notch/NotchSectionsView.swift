@@ -120,7 +120,8 @@ struct NotchSectionsView: View {
             .padding(.horizontal, 6)
             .frame(maxWidth: .infinity)
             .frame(height: NotchLayout.sectionTileHeight)
-            .background(.white.opacity(highlighted ? 0.12 : 0.045), in: shape)
+            .background(shape.fill(.white.opacity(highlighted ? 0.18 : 0.08)))
+            .overlay { NotchGlassHighlight(shape: shape, strength: highlighted ? 1 : 0.7) }
             .overlay {
                 shape.strokeBorder(.white.opacity(highlighted ? 0.55 : contrast == .increased ? 0.4 : 0.04), lineWidth: 1)
             }

@@ -922,6 +922,7 @@ enum DefaultsKey {
     static let notchAgentsEnabled = "notchAgentsEnabled"
     static let notchAgentsClaude = "notchAgentsClaude"
     static let notchAgentsClaudeProfile = "notchAgentsClaudeProfile"
+    static let notchAgentsClaudeAllAccounts = "notchAgentsClaudeAllAccounts" // read every Claude Code config folder, not just the chosen one
     static let notchAgentsCodex = "notchAgentsCodex"
     /// The Codex homes, `CODEX_HOME` folders, that get limits cards of their own.
     static let notchAgentsCodexProfiles = "notchAgentsCodexProfiles"
@@ -982,6 +983,7 @@ enum DefaultsKey {
     static let notchClipboardCardSize = "notchClipboardCardSize"
     static let notchCapture = "notchCapture"
     static let notchTrackChange = "notchTrackChange"
+    static let notchAutoExpand = "notchAutoExpand" // new songs and notifications pop the island open for a moment
     // Legacy backup key. Resting content is now selected explicitly by notchIdleContent.
     static let notchMusicActivity = "notchMusicActivity"
     static let notchShowInCaptures = "notchShowInCaptures"
@@ -994,6 +996,10 @@ enum DefaultsKey {
     static let notchMascotStyle = "notchMascotStyle" // NotchMascotStyle.rawValue
     static let notchMascotShape = "notchMascotShape" // NotchMascotShape.rawValue
     static let notchMascotPalette = "notchMascotPalette" // NotchMascotPalette.rawValue
+    static let notchMascotAccessory = "notchMascotAccessory" // NotchMascotAccessory.rawValue, Hoo's hat or glasses
+    static let notchMascotShows = "notchMascotShows" // now and then the companion drops out of the notch to perform
+    static let notchMascotGameBest = "notchMascotGameBest" // best score in the companion's mini game
+    static let notchQuickAccessDocked = "notchQuickAccessDocked" // quick buttons live in the island's dock, not around it
     static let notchMascotSide = "notchMascotSide" // NotchMascotSide.rawValue, beside the camera
     static let notchMascotVisitFrequency = "notchMascotVisitFrequency" // NotchMascotVisitFrequency.rawValue
     static let notchMascotHidesWhenIdle = "notchMascotHidesWhenIdle" // hops into the island after a quiet while
@@ -1245,7 +1251,7 @@ enum Defaults {
     static let registeredDefaults: [String: Any] = [
         DefaultsKey.appearance: AppAppearance.fallback.rawValue,
         DefaultsKey.liquidGlassEnabled: false,
-        DefaultsKey.notchLiquidGlassEnabled: false,
+        DefaultsKey.notchLiquidGlassEnabled: true,
         DefaultsKey.clamshellPreferred: false,
         DefaultsKey.dimScreenOnLidClose: false,
         DefaultsKey.defaultDuration: 0,
@@ -1531,6 +1537,7 @@ enum Defaults {
         DefaultsKey.notchAgentsEnabled: false,
         DefaultsKey.notchAgentsClaude: true,
         DefaultsKey.notchAgentsClaudeProfile: "",
+        DefaultsKey.notchAgentsClaudeAllAccounts: true,
         DefaultsKey.notchAgentsCodex: true,
         DefaultsKey.notchAgentsCodexProfiles: "",
         DefaultsKey.notchAgentsOpenCode: true,
@@ -1594,6 +1601,7 @@ enum Defaults {
         DefaultsKey.notchClipboardCardSize: NotchClipboardCardSize.comfortable.rawValue,
         DefaultsKey.notchCapture: true,
         DefaultsKey.notchTrackChange: true,
+        DefaultsKey.notchAutoExpand: true,
         DefaultsKey.notchMusicActivity: false,
         DefaultsKey.notchShowInCaptures: true,
         DefaultsKey.notchLockScreen: false,
@@ -1601,9 +1609,13 @@ enum Defaults {
         DefaultsKey.notchMascotEnabled: false,
         DefaultsKey.notchMascotVisits: true,
         DefaultsKey.notchMascotReactions: true,
-        DefaultsKey.notchMascotStyle: NotchMascotStyle.minimal.rawValue,
+        DefaultsKey.notchMascotStyle: NotchMascotStyle.hoo.rawValue,
         DefaultsKey.notchMascotShape: NotchMascotShape.ball.rawValue,
-        DefaultsKey.notchMascotPalette: NotchMascotPalette.pearl.rawValue,
+        DefaultsKey.notchMascotPalette: NotchMascotPalette.lilac.rawValue,
+        DefaultsKey.notchMascotAccessory: "auto",
+        DefaultsKey.notchMascotShows: true,
+        DefaultsKey.notchMascotGameBest: 0,
+        DefaultsKey.notchQuickAccessDocked: true,
         DefaultsKey.notchMascotSide: NotchMascotSide.left.rawValue,
         DefaultsKey.notchMascotVisitFrequency: NotchMascotVisitFrequency.normal.rawValue,
         DefaultsKey.notchMascotHidesWhenIdle: true,

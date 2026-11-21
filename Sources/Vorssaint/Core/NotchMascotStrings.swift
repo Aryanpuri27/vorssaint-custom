@@ -68,7 +68,12 @@ struct NotchMascotStrings {
     let keywords: String
 
     func style(_ style: NotchMascotStyle) -> String {
-        style == .robot ? robot : minimal
+        switch style {
+        case .robot: return robot
+        case .minimal: return minimal
+        case .mochi: return "Mochi"
+        case .hoo: return "Hoo"
+        }
     }
 
     func shape(_ shape: NotchMascotShape) -> String {
@@ -124,7 +129,7 @@ struct NotchMascotStrings {
     /// What a search finds its page by, besides its name.
     var searchKeywords: [String] {
         [hint, visits, reactions, hidesWhenIdle, appearance, style, robot, color, behavior,
-         commandBar, keywords]
+         commandBar, keywords, outfitsCard, outfit, shows, showNow, game]
     }
 
     func frequency(_ frequency: NotchMascotVisitFrequency) -> String {
@@ -546,4 +551,17 @@ extension FeatureStrings {
             keywords: "маскот улюбленець приятель персонаж")
         }
     }
+}
+
+// Hoo's outfits, its shows and its game. English only for now.
+extension NotchMascotStrings {
+    var outfitsCard: String { "Outfits, shows & game" }
+    var outfit: String { "Outfit" }
+    var outfitCaption: String { "Automatic wears headphones with music, a beanie late at night, a scarf in winter and a party hat on Friday evenings." }
+    var outfitOtherStyle: String { "Outfits are drawn for Hoo, the pixel owlet." }
+    var shows: String { "Little shows" }
+    var showsCaption: String { "About every half hour, and when an agent finishes, the companion drops out of the notch to perform for a few seconds." }
+    var showNow: String { "Show me one now" }
+    var game: String { "Firefly Catch" }
+    func gameCaption(best: Int) -> String { "Best score: \(best). Also in the island’s dock: hover the grid button." }
 }

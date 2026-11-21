@@ -32,6 +32,12 @@ def declaration(path, prefix, scope=None, *, closing="}"):
     indent = prefix[:len(prefix) - len(prefix.lstrip())]
     end = next(i for i in range(start + 1, len(lines)) if lines[i].rstrip() == indent + closing)
     body = "".join(lines[start:end + 1])
+    if path.endswith("AgentUsageService.swift"):
+        # Other Claude accounts are found on disk; fixtures read one home only.
+        body = (body.replace("            readerClaudeExtras = ClaudeProfileLimitsService.extras(home: home)\n", "")
+                    .replace("                readerClaudeExtras = ClaudeProfileLimitsService.extras(home: home)\n", "")
+                    .replace(", claudeExtras: readerClaudeExtras", "")
+                    .replace("        ClaudeProfileLimitsService.shared.synchronize()\n", ""))
     return f'#sourceLocation(file: {json.dumps(path)}, line: {start + 1})\n{body}\n#sourceLocation()\n'
 
 
@@ -1493,6 +1499,8 @@ def main():
           + "".join(declaration(scratchpad_reading, prefix) for prefix in [
               "struct MarkdownPreview:", "final class TaskBoxAttachment:", "final class TaskPreviewTextView:"])
           + "}\n"
+          + "".join(declaration("Sources/Vorssaint/UI/Notch/NotchGlassChip.swift", prefix) for prefix in [
+              "struct NotchGlassHighlight<", "struct NotchGlassChip<", "extension View {"])
           + declaration("Sources/Vorssaint/UI/Notch/NotchCalendarView.swift", "extension NotchCalendarColor {")
           + declaration("Sources/Vorssaint/UI/PlainTextLineMover.swift", "enum PlainTextLineMover")
           + "extension NotchCompactTests.ScratchpadService {\n"
@@ -1558,6 +1566,8 @@ def main():
                      + "        }\n    }\n#sourceLocation()\n")
     write("NotchHover.swift", "import AppKit\nextension NotchHoverTests {\nfinal class Service: State {\n"
           + declaration(notch, "    func show(_ incoming:").replace("NotchSupport.routes(incoming.event)", "true")
+            # The island's own pop-open runs on a timer this fixture does not drive.
+            .replace("            if transition != .none, !keepsPreview { scheduleAutoExpand(for: incoming) }\n", "")
             .replace("    func", "    @discardableResult\n    func", 1)
           + "".join(declaration(notch, prefix).replace("    private ", "    ", 1) for prefix in [
               "    private var hiddenUntilHover:", "    private var hiddenAtRestInFullscreen:",

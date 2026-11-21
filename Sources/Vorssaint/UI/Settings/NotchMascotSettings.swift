@@ -58,6 +58,7 @@ struct NotchMascotSettings: View {
                                      visits: visits, reactions: reactions, hides: hidesWhenIdle, text: text,
                                      language: l10n.language)
                 appearance
+                hooCard
                 behavior
                 commandBarCard
             }
@@ -250,6 +251,39 @@ struct NotchMascotSettings: View {
             }
         }
         .animation(animation, value: available && commandBar)
+    }
+
+    @AppStorage(DefaultsKey.notchMascotAccessory) private var accessory = NotchMascotAccessory.auto.rawValue
+    @AppStorage(DefaultsKey.notchMascotShows) private var shows = true
+    @AppStorage(DefaultsKey.notchMascotGameBest) private var best = 0
+
+    /// Outfits, shows and the mini game.
+    private var hooCard: some View {
+        SettingsCard(title: text.outfitsCard) {
+            SettingsRow(symbol: "tshirt", title: text.outfit,
+                        caption: look.style == .hoo ? text.outfitCaption : text.outfitOtherStyle) {
+                Picker("Outfit", selection: $accessory) {
+                    ForEach(NotchMascotAccessory.allCases) { item in Text(item.title).tag(item.rawValue) }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 170)
+            }
+            switchRow("sparkles.tv", text.shows, caption: text.showsCaption, isOn: $shows)
+            SettingsRow(symbol: "play.circle", title: text.showNow) {
+                Menu("Perform") {
+                    Button("Fly by") { NotchStageController.shared.perform(.flyBy) }
+                    Button("Dance") { NotchStageController.shared.perform(.dance) }
+                    Button("Juggle") { NotchStageController.shared.perform(.juggle) }
+                    Button("Magic trick") { NotchStageController.shared.perform(.magic) }
+                    Button("Nap") { NotchStageController.shared.perform(.nap) }
+                }
+                .fixedSize()
+            }
+            SettingsRow(symbol: "gamecontroller", title: text.game, caption: text.gameCaption(best: best)) {
+                Button("Play") { NotchStageController.shared.startGame() }
+            }
+        }
+        .disabled(!enabled)
     }
 
     /// An option with its icon, a line about it and a switch, like the rest of Settings.
