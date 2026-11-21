@@ -5,12 +5,13 @@ import AppKit
 import SwiftUI
 
 enum NotchTool: String, CaseIterable, Identifiable {
-    case terminal, github, focus, reminders, weather, qr, claudeTask, claudeSessions, firefly, hoot
+    case terminal, docker, github, focus, reminders, weather, qr, claudeTask, claudeSessions, firefly, hoot
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .terminal: return "Terminal"
+        case .docker: return "Docker"
         case .github: return "GitHub"
         case .focus: return "Focus"
         case .reminders: return "Reminders"
@@ -26,6 +27,7 @@ enum NotchTool: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .terminal: return "apple.terminal"
+        case .docker: return "shippingbox"
         case .github: return "arrow.triangle.pull"
         case .focus: return "brain.head.profile"
         case .reminders: return "checklist"
@@ -41,6 +43,7 @@ enum NotchTool: String, CaseIterable, Identifiable {
     var color: Color {
         switch self {
         case .terminal: return Color(white: 0.22)
+        case .docker: return Color(red: 0.11, green: 0.5, blue: 0.96)
         case .github: return NotchApple.purple
         case .focus: return NotchApple.orange
         case .reminders: return NotchApple.blue
@@ -55,6 +58,7 @@ enum NotchTool: String, CaseIterable, Identifiable {
     var size: CGSize {
         switch self {
         case .terminal: return CGSize(width: 580, height: 300)
+        case .docker: return CGSize(width: 560, height: 320)
         case .github: return CGSize(width: 500, height: 280)
         case .focus: return CGSize(width: 420, height: 150)
         case .reminders: return CGSize(width: 440, height: 250)
@@ -538,5 +542,155 @@ struct NotchMeetingView: View {
         }
         .padding(.horizontal, 18)
         .foregroundStyle(.white)
+    }
+}
+
+// MARK: Docker
+
+struct NotchDockerView: View {
+    let close: () -> Void
+    @ObservedObject private var docker = NotchDocker.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            NotchToolHeader(tool: .docker, close: close) {
+                if docker.logs == nil {
+                    HStack(spacing: 4) {
+                        Circle().fill(docker.reachable ? NotchApple.green : NotchApple.red).frame(width: 6, height: 6)
+                        Text(docker.reachable ? "OrbStack" : "Not running").font(.system(size: 11)).foregroundStyle(.white.opacity(0.55))
+                    }
+                    if docker.loading { ProgressView().controlSize(.mini) }
+                    Button { docker.refresh() } label: { Image(systemName: "arrow.clockwise").font(.system(size: 11, weight: .semibold)) }
+                        .buttonStyle(.plain).help("Refresh")
+                }
+            }
+            if let logs = docker.logs {
+                logView(logs)
+            } else if docker.docker == nil {
+                message("Docker isn’t installed. Install OrbStack from orbstack.dev.")
+            } else if !docker.reachable {
+                VStack(spacing: 10) {
+                    Text("Docker isn’t running.").font(.system(size: 13, weight: .semibold))
+                    Button("Start OrbStack") { docker.startOrbStack() }.buttonStyle(.plain)
+                        .font(.system(size: 12, weight: .semibold)).padding(.horizontal, 14).frame(height: 28)
+                        .background(NotchApple.blue, in: Capsule())
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if docker.containers.isEmpty {
+                message(docker.loading ? "Loading…" : "No containers.")
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Color.clear.frame(height: 1).id("top")
+                        ForEach(docker.projects, id: \.name) { project in
+                            VStack(alignment: .leading, spacing: 4) {
+                                projectHeader(project.name, project.containers)
+                                ForEach(project.containers) { row($0) }
+                            }
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+                .defaultScrollAnchor(.top)
+            }
+        }
+        .padding(.horizontal, 18)
+        .foregroundStyle(.white)
+        .onAppear { docker.refresh() }
+    }
+
+    private func message(_ text: String) -> some View {
+        Text(text).font(.system(size: 12)).foregroundStyle(.white.opacity(0.6)).frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func projectHeader(_ name: String, _ containers: [NotchDocker.Container]) -> some View {
+        let up = containers.filter(\.running).count
+        return HStack(spacing: 6) {
+            Image(systemName: name.isEmpty ? "shippingbox" : "square.stack.3d.up.fill").font(.system(size: 10, weight: .bold))
+                .foregroundStyle(NotchTool.docker.color)
+            Text(name.isEmpty ? "Containers" : name).font(.system(size: 12, weight: .bold))
+            Text("\(up)/\(containers.count) running").font(.system(size: 10.5)).foregroundStyle(.white.opacity(0.45))
+            Spacer()
+            if !name.isEmpty {
+                chip(up == containers.count ? "Stop all" : "Start all", symbol: up == containers.count ? "stop.fill" : "play.fill") {
+                    docker.project(name, start: up != containers.count)
+                }
+                if up > 0, up < containers.count { chip("Stop all", symbol: "stop.fill") { docker.project(name, start: false) } }
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private func row(_ container: NotchDocker.Container) -> some View {
+        let busy = docker.busy.contains(container.id)
+        let color = container.unhealthy ? NotchApple.orange : container.running ? NotchApple.green
+            : container.status.contains("(0)") ? NotchApple.gray : NotchApple.red
+        return HStack(spacing: 9) {
+            Circle().fill(color).frame(width: 7, height: 7).shadow(color: container.running ? color : .clear, radius: 3)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(container.shortName).font(.system(size: 12.5, weight: .semibold)).lineLimit(1)
+                Text(container.running ? [container.cpu.map { "CPU " + $0 }, container.memory].compactMap { $0 }.joined(separator: " · ")
+                     : container.status)
+                    .font(.system(size: 10)).monospacedDigit().foregroundStyle(.white.opacity(0.45)).lineLimit(1)
+            }
+            .frame(minWidth: 120, alignment: .leading)
+            Text(container.image).font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.35)).lineLimit(1)
+            Spacer(minLength: 4)
+            ForEach(container.ports.prefix(2), id: \.self) { port in
+                Button { NSWorkspace.shared.open(URL(string: "http://localhost:\(port)")!) } label: {
+                    Text(":" + String(port)).font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .padding(.horizontal, 6).frame(height: 18).background(NotchTool.docker.color.opacity(0.3), in: Capsule())
+                }
+                .buttonStyle(.plain).help("Open localhost:\(port)")
+            }
+            if busy {
+                ProgressView().controlSize(.mini).frame(width: 66)
+            } else {
+                icon(container.running ? "stop.fill" : "play.fill", container.running ? "Stop" : "Start") {
+                    docker.act(container.running ? "stop" : "start", container)
+                }
+                icon("arrow.clockwise", "Restart") { docker.act("restart", container) }
+                icon("text.alignleft", "Logs") { docker.showLogs(container) }
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 5)
+        .notchGlassChip(radius: 10, fill: 0.05)
+    }
+
+    private func logView(_ logs: (name: String, text: String)) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Button { docker.logs = nil } label: { Label("Containers", systemImage: "chevron.left").font(.system(size: 11, weight: .semibold)) }
+                    .buttonStyle(.plain)
+                Text(logs.name).font(.system(size: 12, weight: .bold))
+                Spacer()
+                Button("Ask Claude") { docker.askClaudeAboutLogs() }.buttonStyle(.plain).font(.system(size: 11, weight: .semibold))
+                    .padding(.horizontal, 9).frame(height: 22).background(NotchClaudeStyle.accent.opacity(0.8), in: Capsule())
+            }
+            ScrollViewReader { proxy in
+                ScrollView {
+                    Text(logs.text).font(.system(size: 10.5, design: .monospaced)).foregroundStyle(.white.opacity(0.85))
+                        .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(8).id("end")
+                }
+                .onAppear { proxy.scrollTo("end", anchor: .bottom) }
+            }
+            .background(Color(white: 0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+    }
+
+    private func icon(_ symbol: String, _ help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 10, weight: .bold)).frame(width: 20, height: 20)
+                .background(.white.opacity(0.1), in: Circle())
+        }
+        .buttonStyle(NotchSquishButtonStyle()).help(help).accessibilityLabel(help)
+    }
+
+    private func chip(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: symbol).font(.system(size: 10.5, weight: .semibold))
+                .padding(.horizontal, 8).frame(height: 20).background(.white.opacity(0.1), in: Capsule())
+        }
+        .buttonStyle(NotchSquishButtonStyle())
     }
 }

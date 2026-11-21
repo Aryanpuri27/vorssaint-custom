@@ -160,7 +160,7 @@ final class NotchStageController {
         closeWork?.cancel()
         if NotchService.shared.expanded { NotchService.shared.collapse() }
         DispatchQueue.main.asyncAfter(deadline: .now() + (model.mode == .hidden ? 0.35 : 0)) { [weak self] in
-            self?.present(.toolbox, size: CGSize(width: 460, height: 210), interactive: true)
+            self?.present(.toolbox, size: CGSize(width: 460, height: 290), interactive: true)
         }
     }
 
@@ -890,6 +890,7 @@ struct NotchStageToolView: View {
         let close = { NotchStageController.shared.close() }
         switch tool {
         case .terminal: NotchTerminalView(close: close)
+        case .docker: NotchDockerView(close: close)
         case .github: NotchGitHubView(close: close)
         case .focus: NotchFocusView(close: close)
         case .reminders: NotchRemindersView(close: close)

@@ -1012,6 +1012,7 @@ enum DefaultsKey {
     static let claudeRecap = "claudeRecap" // the companion sums up the day's Claude Code work in the evening
     static let claudeSpikeAlert = "claudeSpikeAlert" // the companion warns when spending jumps
     static let notchGitHub = "notchGitHub" // pull requests and checks through the GitHub CLI
+    static let notchDocker = "notchDocker" // containers through the Docker CLI (OrbStack), and crash alerts
     static let notchWeatherCity = "notchWeatherCity" // empty: the city of this Mac's time zone
     static let notchWorldClocks = "notchWorldClocks" // time zone identifiers, comma separated
     static let notchMascotSide = "notchMascotSide" // NotchMascotSide.rawValue, beside the camera
@@ -1639,6 +1640,7 @@ enum Defaults {
         DefaultsKey.claudeRecap: true,
         DefaultsKey.claudeSpikeAlert: true,
         DefaultsKey.notchGitHub: true,
+        DefaultsKey.notchDocker: true,
         DefaultsKey.notchWeatherCity: "",
         DefaultsKey.notchWorldClocks: "America/New_York,Europe/London,Asia/Tokyo",
         DefaultsKey.notchMascotSide: NotchMascotSide.left.rawValue,

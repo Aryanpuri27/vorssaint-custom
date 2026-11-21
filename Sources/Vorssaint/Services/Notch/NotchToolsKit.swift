@@ -523,3 +523,176 @@ enum NotchQR {
         }
     }
 }
+
+// MARK: Docker (OrbStack)
+
+/// Containers through the Docker CLI (OrbStack's here), grouped by Compose
+/// project, with start, stop, restart, logs and their ports. While Docker
+/// runs, the companion speaks up when a container crashes or turns unhealthy.
+final class NotchDocker: ObservableObject {
+    static let shared = NotchDocker()
+
+    struct Container: Identifiable, Equatable {
+        let id: String
+        let name: String
+        let image: String
+        let state: String
+        let status: String
+        let ports: [Int]
+        let project: String?
+        var cpu: String?
+        var memory: String?
+        var running: Bool { state == "running" }
+        var unhealthy: Bool { status.contains("unhealthy") }
+        var shortName: String {
+            guard let project else { return name }
+            var short = name.hasPrefix(project + "-") ? String(name.dropFirst(project.count + 1)) : name
+            if short.hasSuffix("-1") { short.removeLast(2) }
+            return short
+        }
+    }
+
+    @Published private(set) var containers: [Container] = []
+    @Published private(set) var reachable = true
+    @Published private(set) var loading = false
+    @Published private(set) var busy = Set<String>()
+    @Published var logs: (name: String, text: String)?
+    private var watcher: Timer?
+    private var lastStates: [String: (state: String, unhealthy: Bool)] = [:]
+
+    var docker: URL? { NotchTools.executable("docker") }
+
+    var projects: [(name: String, containers: [Container])] {
+        let grouped = Dictionary(grouping: containers) { $0.project ?? "" }
+        return grouped.keys.sorted { a, b in
+            if a.isEmpty != b.isEmpty { return !a.isEmpty }
+            let runningA = grouped[a]!.contains(where: \.running), runningB = grouped[b]!.contains(where: \.running)
+            return runningA != runningB ? runningA : a < b
+        }.map { ($0, grouped[$0]!.sorted { $0.running != $1.running ? $0.running : $0.name < $1.name }) }
+    }
+
+    /// Watches quietly once a minute for crashes and health changes.
+    func startWatching() {
+        guard watcher == nil, docker != nil, UserDefaults.standard.object(forKey: DefaultsKey.notchDocker) as? Bool ?? true else { return }
+        let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in self?.refresh(stats: false) }
+        timer.tolerance = 10
+        RunLoop.main.add(timer, forMode: .common)
+        watcher = timer
+        refresh(stats: false)
+    }
+
+    func refresh(stats: Bool = true) {
+        guard let docker, !loading else { return }
+        loading = true
+        Task {
+            let list = await NotchTools.run(docker, ["ps", "-a", "--format", "{{json .}}"], timeout: 10)
+            var usage: [String: (String, String)] = [:]
+            if stats, list.status == 0 {
+                let result = await NotchTools.run(docker, ["stats", "--no-stream", "--format", "{{json .}}"], timeout: 12)
+                for line in result.output.split(separator: "\n") {
+                    guard let json = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                          let name = json["Name"] as? String else { continue }
+                    let memory = (json["MemUsage"] as? String)?.components(separatedBy: " / ").first ?? ""
+                    usage[name] = (json["CPUPerc"] as? String ?? "", memory)
+                }
+            }
+            let gathered = usage
+            await MainActor.run { self.finish(list, usage: gathered) }
+        }
+    }
+
+    private func finish(_ list: (status: Int32, output: String), usage: [String: (String, String)]) {
+        loading = false
+        reachable = list.status == 0
+        guard reachable else { containers = []; return }
+        let parsed: [Container] = list.output.split(separator: "\n").compactMap { line in
+            guard let json = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                  let id = json["ID"] as? String, let name = json["Names"] as? String else { return nil }
+            let labels = json["Labels"] as? String ?? ""
+            let project = labels.split(separator: ",").first { $0.hasPrefix("com.docker.compose.project=") }
+                .map { String($0.dropFirst("com.docker.compose.project=".count)) }
+            let ports = Self.hostPorts(json["Ports"] as? String ?? "")
+            return Container(id: id, name: name, image: json["Image"] as? String ?? "", state: json["State"] as? String ?? "",
+                             status: json["Status"] as? String ?? "", ports: ports, project: project,
+                             cpu: usage[name]?.0, memory: usage[name]?.1)
+        }
+        // Speak up for what changed on its own: a crash or a turn for the worse.
+        if !lastStates.isEmpty {
+            for container in parsed {
+                guard let before = lastStates[container.id], !busy.contains(container.id) else { continue }
+                if before.state == "running", container.state == "exited", !container.status.contains("(0)") {
+                    NotchStageController.shared.say("🐳 \(container.shortName) crashed: \(container.status.prefix(24))")
+                } else if !before.unhealthy, container.unhealthy {
+                    NotchStageController.shared.say("🐳 \(container.shortName) is unhealthy")
+                }
+            }
+        }
+        lastStates = Dictionary(uniqueKeysWithValues: parsed.map { ($0.id, ($0.state, $0.unhealthy)) })
+        containers = parsed
+    }
+
+    /// Host ports a container publishes, from "0.0.0.0:5432->5432/tcp, …".
+    static func hostPorts(_ text: String) -> [Int] {
+        var ports: [Int] = []
+        for part in text.components(separatedBy: ", ") {
+            guard let arrow = part.range(of: "->"), let colon = part[..<arrow.lowerBound].lastIndex(of: ":"),
+                  let port = Int(part[part.index(after: colon)..<arrow.lowerBound]), !ports.contains(port) else { continue }
+            ports.append(port)
+        }
+        return ports
+    }
+
+    func act(_ verb: String, _ container: Container) {
+        guard let docker else { return }
+        busy.insert(container.id)
+        Task {
+            let result = await NotchTools.run(docker, [verb, container.id], timeout: 60)
+            await MainActor.run {
+                self.busy.remove(container.id)
+                if result.status != 0 { NotchStageController.shared.say("Couldn’t \(verb) \(container.shortName)") }
+                self.refresh()
+            }
+        }
+    }
+
+    /// Starts or stops every container of a Compose project, without its file.
+    func project(_ name: String, start: Bool) {
+        guard let docker else { return }
+        let ids = containers.filter { $0.project == name }.map(\.id)
+        busy.formUnion(ids)
+        Task {
+            _ = await NotchTools.run(docker, [start ? "start" : "stop"] + ids, timeout: 120)
+            await MainActor.run {
+                self.busy.subtract(ids)
+                NotchStageController.shared.say("🐳 \(name) \(start ? "is up" : "stopped")")
+                self.refresh()
+            }
+        }
+    }
+
+    func showLogs(_ container: Container) {
+        guard let docker else { return }
+        logs = (container.shortName, "Loading…")
+        Task {
+            let result = await NotchTools.run(docker, ["logs", "--tail", "120", "--timestamps", container.id], timeout: 15)
+            await MainActor.run { self.logs = (container.shortName, result.output.isEmpty ? "No logs." : result.output) }
+        }
+    }
+
+    func startOrbStack() {
+        guard let orb = NotchTools.executable("orb") else { return }
+        Task {
+            _ = await NotchTools.run(orb, ["start"], timeout: 60)
+            await MainActor.run { self.refresh() }
+        }
+    }
+
+    func askClaudeAboutLogs() {
+        guard let logs else { return }
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let profile = ClaudeAccountProfile.discover(home: home).first { !$0.isDefault } ?? ClaudeAccountProfile()
+        NotchClaudeExtras.shared.run(prompt: "These are the last logs of the Docker container \(logs.name):\n\(String(logs.text.suffix(6000)))\n\nWhat is going on, and is anything wrong? Be brief.",
+                                     folder: home.path, profile: profile, allowEdits: false)
+        NotchStageController.shared.say("Asked Claude about \(logs.name)’s logs")
+    }
+}
