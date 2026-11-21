@@ -341,13 +341,43 @@ struct NotchClipboardView: View {
                 .help(app.name)
                 .accessibilityLabel(app.name)
         } else {
-            Image(systemName: kindSymbol(entry))
-                .font(.system(size: 10)).foregroundStyle(.secondary)
+            kindBadge(entry)
+        }
+    }
+
+    /// A copied color shows as its swatch; anything else as a small app icon.
+    @ViewBuilder private func kindBadge(_ entry: ClipboardHistoryEntry) -> some View {
+        if let color = Self.hexColor(entry.text.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            Circle().fill(color).frame(width: 16, height: 16)
+                .overlay { Circle().strokeBorder(.white.opacity(0.7), lineWidth: 1.5) }
+        } else {
+            NotchAppIcon(symbol: kindSymbol(entry), color: kindColor(entry), size: 18)
         }
     }
 
     private func kindSymbol(_ entry: ClipboardHistoryEntry) -> String {
-        entry.kind == .image ? "photo" : entry.kind == .files ? "doc" : "text.alignleft"
+        if entry.kind == .image { return "photo" }
+        if entry.kind == .files { return "doc" }
+        let text = entry.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("http://") || text.hasPrefix("https://") || text.hasPrefix("www.") { return "link" }
+        if Self.hexColor(text) != nil { return "paintpalette" }
+        if text.contains("{") && text.contains("}") || text.contains("func ") || text.contains("=>") { return "chevron.left.forwardslash.chevron.right" }
+        return "text.alignleft"
+    }
+
+    private func kindColor(_ entry: ClipboardHistoryEntry) -> Color {
+        if let color = Self.hexColor(entry.text.trimmingCharacters(in: .whitespacesAndNewlines)) { return color }
+        switch kindSymbol(entry) {
+        case "photo": return NotchApple.mint
+        case "doc", "link": return NotchApple.blue
+        case "chevron.left.forwardslash.chevron.right": return NotchApple.indigo
+        default: return NotchApple.gray
+        }
+    }
+
+    private static func hexColor(_ text: String) -> Color? {
+        guard text.hasPrefix("#"), text.count == 7, let value = Int(text.dropFirst(), radix: 16) else { return nil }
+        return Color(red: Double(value >> 16 & 0xFF) / 255, green: Double(value >> 8 & 0xFF) / 255, blue: Double(value & 0xFF) / 255)
     }
 
     /// The surface an entry sits on, with its menu and actions. An open entry
@@ -428,10 +458,10 @@ struct NotchClipboardView: View {
                 Image(nsImage: icon).resizable().interpolation(.high).frame(width: 14, height: 14)
                     .accessibilityHidden(true)
             } else {
-                Image(systemName: kindSymbol(entry)).font(.system(size: 10)).foregroundStyle(.secondary)
+                kindBadge(entry)
             }
         }
-        .frame(width: 14)
+        .frame(width: 18)
     }
 
     /// The whole entry, with its actions in the bottom row.

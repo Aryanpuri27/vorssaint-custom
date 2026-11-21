@@ -73,9 +73,12 @@ struct NotchAppIcon: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: size * 0.27, style: .continuous)
         Image(systemName: symbol)
+            .resizable()
+            .scaledToFit()
             .symbolVariant(.fill)
-            .font(.system(size: size * 0.46, weight: .semibold))
+            .fontWeight(.semibold)
             .foregroundStyle(.white)
+            .frame(width: size * 0.52, height: size * 0.52)
             .frame(width: size, height: size)
             .background {
                 shape.fill(LinearGradient(colors: [color.mix(.white, 0.18), color.mix(.black, 0.12)],
@@ -94,5 +97,44 @@ extension Color {
         return Color(.sRGB, red: a.redComponent + (b.redComponent - a.redComponent) * amount,
                      green: a.greenComponent + (b.greenComponent - a.greenComponent) * amount,
                      blue: a.blueComponent + (b.blueComponent - a.blueComponent) * amount, opacity: 1)
+    }
+}
+
+/// Control Center's round button: tinted with its color when off, filled
+/// with it when on, the glyph sized to the circle.
+struct NotchCCGlyph: View {
+    let symbol: String
+    let color: Color
+    var on = false
+    var size: CGFloat = 42
+
+    var body: some View {
+        Image(systemName: symbol)
+            .resizable()
+            .scaledToFit()
+            .symbolVariant(.fill)
+            .fontWeight(.semibold)
+            .foregroundStyle(on ? .white : color)
+            .frame(width: size * 0.44, height: size * 0.44)
+            .frame(width: size, height: size)
+            .background(on ? color : color.opacity(0.2), in: Circle())
+            .overlay { Circle().strokeBorder(.white.opacity(on ? 0.3 : 0.06), lineWidth: 0.5) }
+    }
+}
+
+/// A page's name, large and bold, the way Apple's apps open.
+struct NotchPageTitle: View {
+    let title: String
+    let color: Color
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 17, weight: .bold))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .padding(.leading, 2)
+            .overlay(alignment: .bottomLeading) {
+                Capsule().fill(color).frame(width: 14, height: 3).offset(x: 2, y: 5)
+            }
     }
 }

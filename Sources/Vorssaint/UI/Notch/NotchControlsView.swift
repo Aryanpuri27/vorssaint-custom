@@ -151,7 +151,7 @@ struct NotchAudioControls: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            mute
+            // Control Center's slider: the level and its icon, nothing beside it.
             slider
             NotchLevelChooser(title: l10n.s.mixerSystemOutputTitle, items: outputItems)
                 .accessibilityValue(deviceName)
@@ -171,9 +171,11 @@ struct NotchAudioControls: View {
         Button {
             if let muted = mixer.systemOutputMuted { adjustOutput(muted: !muted) }
         } label: {
-            Image(systemName: mixer.systemOutputMuted == true ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(mixer.systemOutputMuted == true ? Color.red : Color.white)
+            Image(systemName: "speaker.slash.fill")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(mixer.systemOutputMuted == true ? Color.white : Color.white.opacity(0.7))
+                .frame(width: 22, height: 22)
+                .background(mixer.systemOutputMuted == true ? NotchApple.red : Color.white.opacity(0.12), in: Circle())
                 .contentTransition(.symbolEffect(.replace))
                 .animation(reduceMotion ? nil : .smooth(duration: 0.24), value: mixer.systemOutputMuted)
                 .frame(width: 18, height: 18)
@@ -189,7 +191,8 @@ struct NotchAudioControls: View {
             // In the island's top row the volume draws as slim as the song's
             // position bar, keeping the full height to grab it by.
             NotchLevelSlider(value: Binding(get: { level }, set: { adjustOutput(volume: $0) }),
-                             label: FeatureStrings.notch(l10n.language).volume, trackThickness: 8, easesChanges: true)
+                             label: FeatureStrings.notch(l10n.language).volume, trackThickness: 22, easesChanges: true,
+                             glyph: "speaker.wave.2.fill")
                 .frame(height: 24)
         } else {
             Text(l10n.s.mixerOutputUnavailable).font(.system(size: 10)).foregroundStyle(.secondary)
@@ -288,7 +291,6 @@ private struct NotchBrightnessControls: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            glyph
             slider
             // A single display leaves nothing to choose.
             if let display, displays.count > 1 {
@@ -320,7 +322,8 @@ private struct NotchBrightnessControls: View {
                 // The slider shows the level it sets, so neither a reading in
                 // the row nor the system's indicator repeats it.
                 service.setBrightness($0, for: display.id, announces: false)
-            }), label: FeatureStrings.notch(l10n.language).brightness, trackThickness: 8, easesChanges: true)
+            }), label: FeatureStrings.notch(l10n.language).brightness, trackThickness: 22, easesChanges: true,
+               glyph: "sun.max.fill")
                 .frame(height: 24)
         } else {
             Text(FeatureStrings.brightness(l10n.language).noDisplays)
@@ -425,13 +428,8 @@ struct NotchActionTile: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6) {
-                Image(systemName: symbol).font(.system(size: 17, weight: .semibold))
-                    .symbolVariant(.fill)
-                    .foregroundStyle(active ? .white : NotchApple.color(for: symbol))
+                NotchCCGlyph(symbol: symbol, color: NotchApple.color(for: symbol), on: active)
                     .contentTransition(.symbolEffect(.replace))
-                    .frame(width: 42, height: 42)
-                    .background(active ? NotchApple.color(for: symbol) : Color.white.opacity(0.1), in: Circle())
-                    .overlay { Circle().strokeBorder(.white.opacity(active ? 0.25 : 0.08), lineWidth: 0.5) }
                     .animation(reduceMotion ? nil : .smooth(duration: 0.26), value: symbol)
                 label
                     .frame(maxWidth: .infinity)

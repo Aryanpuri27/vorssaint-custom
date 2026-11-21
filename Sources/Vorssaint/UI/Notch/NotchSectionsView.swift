@@ -102,34 +102,26 @@ struct NotchSectionsView: View {
         let current = service.selected == module
         let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
         return Button { service.select(module) } label: {
-            VStack(spacing: 5) {
-                NotchAppIcon(symbol: module.symbol, color: NotchApple.color(for: module), size: 34)
+            VStack(spacing: 7) {
+                NotchAppIcon(symbol: module.symbol, color: NotchApple.color(for: module), size: 46)
+                    .scaleEffect(highlighted ? 1.06 : 1)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.65), value: highlighted)
                 Text(module.title(l10n.language))
-                    .font(.system(size: 11, weight: .semibold))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.85)
-                    .multilineTextAlignment(.center)
-                    .frame(height: 27)
-                Text("⌥⌘" + module.shortcutKey.uppercased())
-                    .font(.system(size: 9.5, weight: .medium, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.45))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                // The page open now: a dot under its name, as the Dock marks a running app.
+                Circle().fill(.white.opacity(current ? 0.8 : 0)).frame(width: 4, height: 4)
             }
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 4)
             .frame(maxWidth: .infinity)
             .frame(height: NotchLayout.sectionTileHeight)
-            .background(shape.fill(.white.opacity(highlighted ? 0.18 : 0.08)))
-            .overlay { NotchGlassHighlight(shape: shape, strength: highlighted ? 1 : 0.7) }
+            .background(shape.fill(.white.opacity(highlighted ? 0.1 : 0)))
             .overlay {
-                shape.strokeBorder(.white.opacity(highlighted ? 0.55 : contrast == .increased ? 0.4 : 0.04), lineWidth: 1)
+                shape.strokeBorder(.white.opacity(contrast == .increased && highlighted ? 0.5 : 0), lineWidth: 1)
             }
-            .overlay(alignment: .topTrailing) {
-                if current {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(0.7))
-                        .padding(7)
-                }
-            }
+            .help(module.title(l10n.language) + "  ⌥⌘" + module.shortcutKey.uppercased())
             .contentShape(shape)
         }
         .buttonStyle(NotchButtonStyle(cornerRadius: 16, lifts: false))

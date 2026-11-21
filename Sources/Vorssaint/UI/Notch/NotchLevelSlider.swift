@@ -28,6 +28,8 @@ struct NotchLevelSlider: NSViewRepresentable {
     /// scrolled, since each step would seek.
     var scrollable = true
     var onEditingChanged: ((Bool) -> Void)?
+    /// An SF Symbol drawn inside the track, as Control Center's sliders do.
+    var glyph: String? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -74,6 +76,10 @@ struct NotchLevelSlider: NSViewRepresentable {
         (slider.cell as? NotchLevelCell)?.fill = NSColor(tint)
         (slider.cell as? NotchLevelCell)?.marker = marker
         (slider.cell as? NotchLevelCell)?.trackThickness = trackThickness
+        if (slider.cell as? NotchLevelCell)?.glyphName != glyph {
+            (slider.cell as? NotchLevelCell)?.glyphName = glyph
+            slider.needsDisplay = true
+        }
         let bounded = value.isFinite ? min(upper, max(lower, value)) : lower
         if slider.doubleValue != bounded {
             let cell = slider.cell as? NotchLevelCell
@@ -219,6 +225,7 @@ private final class NotchLevelCell: NSSliderCell {
     var fill: NSColor = .white
     var marker: Double?
     var trackThickness: CGFloat?
+    var glyphName: String?
     var trackingChanged: ((Bool) -> Void)?
     /// Where the bar is drawn while it eases to the slider's value.
     var drawnValue: Double?
@@ -258,7 +265,8 @@ private final class NotchLevelCell: NSSliderCell {
     override func drawBar(inside rect: NSRect, flipped: Bool) {
         let track = barRect(flipped: flipped)
         guard track.width > 0, track.height > 0 else { return }
-        let radius = min(track.width, track.height) / 2
+        // Wide Control Center sliders are rounded squares at the ends, not pills.
+        let radius = glyphName != nil ? min(min(track.width, track.height) / 2, 12) : min(track.width, track.height) / 2
         let outline = NSBezierPath(roundedRect: track, xRadius: radius, yRadius: radius)
         NSGraphicsContext.saveGraphicsState()
         outline.addClip()
@@ -281,6 +289,29 @@ private final class NotchLevelCell: NSSliderCell {
                 NSRect(x: track.minX, y: y - 0.5, width: track.width, height: 1).fill()
             } else {
                 NSRect(x: track.minX + track.width * position - 0.5, y: track.minY, width: 1, height: track.height).fill()
+            }
+        }
+        if let glyphName, let symbol = NSImage(systemSymbolName: glyphName, accessibilityDescription: nil) {
+            let side = min(isFader ? track.width : track.height, 40) * 0.42
+            let config = NSImage.SymbolConfiguration(pointSize: side, weight: .semibold)
+            if let image = symbol.withSymbolConfiguration(config) {
+                let size = image.size
+                let origin: NSPoint = isFader
+                    ? NSPoint(x: track.midX - size.width / 2, y: flipped ? track.maxY - size.height - 9 : track.minY + 9)
+                    : NSPoint(x: track.minX + 8, y: track.midY - size.height / 2)
+                // Dark over the fill, light over the empty track.
+                let center = isFader ? (flipped ? (track.maxY - origin.y - size.height / 2) : (origin.y + size.height / 2 - track.minY)) / track.height
+                    : (origin.x + size.width / 2 - track.minX) / track.width
+                let covered = center <= fraction
+                let tint = covered ? NSColor.black.withAlphaComponent(0.55) : NSColor.white.withAlphaComponent(0.8)
+                let tinted = NSImage(size: size, flipped: false) { rect in
+                    image.draw(in: rect)
+                    tint.set()
+                    rect.fill(using: .sourceAtop)
+                    return true
+                }
+                tinted.draw(in: NSRect(origin: origin, size: size), from: .zero, operation: .sourceOver,
+                            fraction: 1, respectFlipped: true, hints: nil)
             }
         }
         NSGraphicsContext.restoreGraphicsState()

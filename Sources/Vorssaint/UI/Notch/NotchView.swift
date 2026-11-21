@@ -378,6 +378,9 @@ struct NotchView: View {
             if !wraps {
                 bandLeading(band)
                 items.leading
+                if items.leading == nil, !service.showingSections, !showsDetail, !service.modules.isEmpty {
+                    NotchPageTitle(title: service.selected.title(l10n.language), color: NotchApple.color(for: service.selected))
+                }
             }
         } trailing: {
             if makesRoom {

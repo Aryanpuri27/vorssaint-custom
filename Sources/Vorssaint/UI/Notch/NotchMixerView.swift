@@ -224,7 +224,8 @@ private struct NotchMasterFader: View {
             .accessibilityLabel(muted ? l10n.s.actionUnmute : l10n.s.actionMute)
             if let level {
                 NotchLevelSlider(value: Binding(get: { level }, set: { adjustOutput(volume: $0) }),
-                                 label: l10n.s.mixerSystemOutputTitle, vertical: true, trackThickness: 28)
+                                 label: l10n.s.mixerSystemOutputTitle, vertical: true, trackThickness: 38,
+                                 glyph: "speaker.wave.2.fill")
                     .frame(width: 40, height: NotchMixerFaderLayout.trackHeight(in: height))
                 NotchEditablePercent(percent: MixerRoutingSupport.displayPercent(forVolume: level), maximum: 100,
                                      editorID: "notch-system-output", editingID: $editingVolumeID,
@@ -527,8 +528,8 @@ private struct NotchAppFader: View {
             } else {
                 NotchLevelSlider(value: Binding(get: { app.volume }, set: { mixer.setVolume($0, for: app) }),
                                  label: app.name, range: 0...AppVolumeMixer.maxVolume,
-                                 tint: boosting ? .orange : .white, vertical: true, trackThickness: 28, marker: 1,
-                                 valueLabel: "\(percent)%")
+                                 tint: boosting ? .orange : .white, vertical: true, trackThickness: 38, marker: 1,
+                                 valueLabel: "\(percent)%", glyph: "speaker.wave.2.fill")
                     .frame(width: 40, height: NotchMixerFaderLayout.trackHeight(in: height))
                 NotchEditablePercent(percent: percent, maximum: Int(AppVolumeMixer.maxVolume * 100),
                                      editorID: "notch-app:\(app.id)", editingID: $editingVolumeID,

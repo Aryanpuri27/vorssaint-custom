@@ -260,14 +260,22 @@ struct QuickLauncherView: View {
         } label: {
             VStack(spacing: notchSize == nil ? 7 : 6) {
                 ZStack(alignment: .topTrailing) {
-                    RoundedRectangle(cornerRadius: notchSize == nil ? 12 : 16, style: .continuous)
-                        .fill(iconBackground(item, isSelected: isSelected, isHovered: isHovered))
-                        .frame(width: notchSize == nil ? 46 : 32, height: notchSize == nil ? 46 : 32)
-                        .overlay(
-                            Image(systemName: icon(for: item))
-                                .font(.system(size: notchSize == nil ? 19 : 16, weight: .semibold))
-                                .foregroundStyle(iconColor(item))
-                        )
+                    if notchSize != nil {
+                        NotchAppIcon(symbol: icon(for: item),
+                                     color: item == .micMute && micMute.isMuted ? NotchApple.red : NotchApple.color(for: icon(for: item)),
+                                     size: 40)
+                            .scaleEffect(isSelected || isHovered ? 1.06 : 1)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.65), value: isSelected || isHovered)
+                    } else {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(iconBackground(item, isSelected: isSelected, isHovered: isHovered))
+                            .frame(width: 46, height: 46)
+                            .overlay(
+                                Image(systemName: icon(for: item))
+                                    .font(.system(size: 19, weight: .semibold))
+                                    .foregroundStyle(iconColor(item))
+                            )
+                    }
                     if launcher.isEditing {
                         Button {
                             withAnimation(.easeOut(duration: 0.15)) {
