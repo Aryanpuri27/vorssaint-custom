@@ -225,9 +225,9 @@ final class ClaudeLiveService: ObservableObject {
 
     private func accountName(_ configDir: String) -> String {
         let trimmed = configDir.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return "office" }
+        guard !trimmed.isEmpty else { return "main" }
         let name = URL(fileURLWithPath: trimmed).lastPathComponent
-        return name.hasPrefix(".claude-") ? String(name.dropFirst(8)) : name == ".claude" ? "office" : name
+        return name.hasPrefix(".claude-") ? String(name.dropFirst(8)) : name == ".claude" ? "main" : name
     }
 
     private func session(for json: [String: Any], context: Context) -> Int {

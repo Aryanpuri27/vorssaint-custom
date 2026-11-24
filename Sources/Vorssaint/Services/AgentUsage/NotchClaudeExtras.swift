@@ -96,7 +96,7 @@ final class NotchClaudeExtras: ObservableObject {
         folders.removeAll { $0 == folder }; folders.insert(folder, at: 0)
         UserDefaults.standard.set(Array(folders.prefix(8)), forKey: "claudeTaskFolders")
 
-        let account = profile.isDefault ? "office" : profile.name(defaultName: "office")
+        let account = profile.isDefault ? "main" : profile.name(defaultName: "main")
         var task = Task(project: URL(fileURLWithPath: folder).lastPathComponent, folder: folder, prompt: prompt, account: account)
         let process = Process()
         process.executableURL = executable

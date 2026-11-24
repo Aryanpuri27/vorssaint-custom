@@ -361,7 +361,7 @@ struct NotchClaudeComposeView: View {
                 .fixedSize()
                 Picker("", selection: $account) {
                     ForEach(accounts) { profile in
-                        Text(profile.isDefault ? "office" : profile.name(defaultName: "office")).tag(profile.directory)
+                        Text(profile.isDefault ? "main" : profile.name(defaultName: "main")).tag(profile.directory)
                     }
                 }
                 .labelsHidden().fixedSize().controlSize(.small)

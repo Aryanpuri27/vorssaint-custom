@@ -7,7 +7,7 @@ set -euo pipefail
 U=http://127.0.0.1:47615/vorssaint-hook
 T=$(defaults read com.vorssaint.utils.dev claudeLiveToken)
 P="$HOME/Projects/demo-app"
-send() { curl -s -m 30 -X POST $U -H "X-Vorssaint-Token: $T" -H "X-Claude-Config: $HOME/.claude-personal" -d "$1"; echo; }
+send() { curl -s -m 30 -X POST $U -H "X-Vorssaint-Token: $T" -H "X-Claude-Config: ${CLAUDE_CONFIG_DIR:-$HOME/.claude}" -d "$1"; echo; }
 case "${1:-}" in
   ask)      send '{"hook_event_name":"PermissionRequest","session_id":"sample","cwd":"'$P'","tool_name":"Bash","tool_input":{"command":"rm -rf node_modules && npm install"}}' ;;
   question) send '{"hook_event_name":"PermissionRequest","session_id":"sample","cwd":"'$P'","tool_name":"AskUserQuestion","tool_input":{"questions":[{"question":"Which database should the app use?","header":"Database","options":[{"label":"SQLite"},{"label":"Postgres"},{"label":"Supabase"}],"multiSelect":false}]}}' ;;
